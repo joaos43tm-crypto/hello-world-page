@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-type AppRole = 'admin' | 'atendente' | 'tosador'
+type AppRole = 'admin' | 'atendente' | 'tosador' | 'medico'
 
 const normalizeCnpj = (value: string) => (value ?? '').replace(/\D/g, '')
 
@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
       })
     }
 
-    if (!['admin', 'atendente', 'tosador'].includes(role)) {
+    if (!['admin', 'atendente', 'tosador', 'medico'].includes(role)) {
       return new Response(JSON.stringify({ error: 'Permissão inválida' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

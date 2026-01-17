@@ -3,7 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { Dog } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
-type AppRole = "admin" | "atendente" | "tosador";
+type AppRole = "admin" | "atendente" | "tosador" | "medico";
 
 interface RoleRouteProps {
   children: ReactNode;
