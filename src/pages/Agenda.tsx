@@ -3,28 +3,32 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { AppointmentCard } from "@/components/dashboard/AppointmentCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
+import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AppointmentForm } from "@/components/forms/AppointmentForm";
-import { 
-  Calendar, 
-  ChevronLeft, 
+import {
+  Calendar,
+  ChevronLeft,
   ChevronRight,
   Plus,
 } from "lucide-react";
-import { 
-  appointmentsApi, 
+import {
+  appointmentsApi,
   type Appointment,
-  type AppointmentStatus 
+  type AppointmentStatus,
 } from "@/lib/petcontrol.api";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Agenda() {
   const { toast } = useToast();
+  const { role } = useAuth();
+  const canCreateAppointment = role !== "tosador";
+
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -107,10 +111,12 @@ export default function Agenda() {
               Agenda
             </h1>
           </div>
-          <Button onClick={() => setShowNewAppointment(true)} className="gap-2">
-            <Plus size={18} />
-            Agendar
-          </Button>
+          {canCreateAppointment && (
+            <Button onClick={() => setShowNewAppointment(true)} className="gap-2">
+              <Plus size={18} />
+              Agendar
+            </Button>
+          )}
         </div>
 
         {/* Date Navigation */}
@@ -200,29 +206,33 @@ export default function Agenda() {
               <p className="text-muted-foreground mb-4">
                 Não há atendimentos marcados para esta data.
               </p>
-              <Button onClick={() => setShowNewAppointment(true)} className="gap-2">
-                <Plus size={18} />
-                Agendar
-              </Button>
+              {canCreateAppointment && (
+                <Button onClick={() => setShowNewAppointment(true)} className="gap-2">
+                  <Plus size={18} />
+                  Agendar
+                </Button>
+              )}
             </div>
           )}
         </div>
 
         {/* New Appointment Dialog */}
-        <Dialog open={showNewAppointment} onOpenChange={setShowNewAppointment}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-primary" />
-                Novo Agendamento
-              </DialogTitle>
-            </DialogHeader>
-            <AppointmentForm 
-              onSave={handleNewAppointment}
-              defaultDate={selectedDate}
-            />
-          </DialogContent>
-        </Dialog>
+        {canCreateAppointment && (
+          <Dialog open={showNewAppointment} onOpenChange={setShowNewAppointment}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-primary" />
+                  Novo Agendamento
+                </DialogTitle>
+              </DialogHeader>
+              <AppointmentForm
+                onSave={handleNewAppointment}
+                defaultDate={selectedDate}
+              />
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </MainLayout>
   );

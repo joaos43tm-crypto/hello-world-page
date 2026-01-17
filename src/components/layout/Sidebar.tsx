@@ -15,19 +15,28 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 
-const mainNavItems = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/agenda", label: "Agenda", icon: Calendar },
-  { path: "/clientes", label: "Clientes & Pets", icon: Dog },
-  { path: "/vendas", label: "PDV", icon: ShoppingCart },
-  { path: "/relatorios", label: "Relatórios", icon: BarChart3 },
+type AppRole = "admin" | "atendente" | "tosador";
+
+type SidebarItem = {
+  path: string;
+  label: string;
+  icon: any;
+  allow: AppRole[];
+};
+
+const mainNavItems: SidebarItem[] = [
+  { path: "/", label: "Dashboard", icon: LayoutDashboard, allow: ["admin", "atendente", "tosador"] },
+  { path: "/agenda", label: "Agenda", icon: Calendar, allow: ["admin", "atendente", "tosador"] },
+  { path: "/clientes", label: "Clientes & Pets", icon: Dog, allow: ["admin", "atendente"] },
+  { path: "/vendas", label: "PDV", icon: ShoppingCart, allow: ["admin", "atendente"] },
+  { path: "/relatorios", label: "Relatórios", icon: BarChart3, allow: ["admin", "atendente"] },
 ];
 
-const settingsNavItems = [
-  { path: "/servicos", label: "Serviços", icon: Scissors },
-  { path: "/produtos", label: "Produtos", icon: Package },
-  { path: "/profissionais", label: "Profissionais", icon: Users },
-  { path: "/configuracoes", label: "Configurações", icon: Settings },
+const settingsNavItems: SidebarItem[] = [
+  { path: "/servicos", label: "Serviços", icon: Scissors, allow: ["admin"] },
+  { path: "/produtos", label: "Produtos", icon: Package, allow: ["admin"] },
+  { path: "/profissionais", label: "Profissionais", icon: Users, allow: ["admin"] },
+  { path: "/configuracoes", label: "Configurações", icon: Settings, allow: ["admin"] },
 ];
 
 export function Sidebar() {
@@ -62,30 +71,9 @@ export function Sidebar() {
         <p className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Menu Principal
         </p>
-        {mainNavItems.map((item) => {
-          const isActive = location.pathname === item.path;
-          const Icon = item.icon;
-
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={cn(
-                "nav-item",
-                isActive && "nav-item-active"
-              )}
-            >
-              <Icon size={20} />
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
-
-        <div className="pt-4">
-          <p className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Cadastros
-          </p>
-          {settingsNavItems.map((item) => {
+        {mainNavItems
+          .filter((item) => !role || item.allow.includes(role as AppRole))
+          .map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
 
@@ -103,6 +91,31 @@ export function Sidebar() {
               </Link>
             );
           })}
+
+        <div className="pt-4">
+          <p className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Cadastros
+          </p>
+          {settingsNavItems
+            .filter((item) => !role || item.allow.includes(role as AppRole))
+            .map((item) => {
+              const isActive = location.pathname === item.path;
+              const Icon = item.icon;
+
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={cn(
+                    "nav-item",
+                    isActive && "nav-item-active"
+                  )}
+                >
+                  <Icon size={20} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
         </div>
       </nav>
 
