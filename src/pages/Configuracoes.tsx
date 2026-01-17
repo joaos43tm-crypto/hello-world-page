@@ -36,7 +36,8 @@ import {
   Users,
   Shield,
   LogOut,
-  Plus
+  Plus,
+  Pencil
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -91,12 +92,18 @@ export default function Configuracoes() {
 
   // Create user modal
   const [createOpen, setCreateOpen] = useState(false);
+  const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserRole, setNewUserRole] = useState<"admin" | "atendente" | "tosador">("atendente");
   const [isCreatingUser, setIsCreatingUser] = useState(false);
 
-  // Form state
+  // Edit user modal
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
+  const [editUserName, setEditUserName] = useState("");
+  const [editUserRole, setEditUserRole] = useState<"admin" | "atendente" | "tosador">("atendente");
+  const [isUpdatingUser, setIsUpdatingUser] = useState(false);
   const [storeName, setStoreName] = useState("");
   const [storePhone, setStorePhone] = useState("");
   const [storeEmail, setStoreEmail] = useState("");
@@ -246,14 +253,20 @@ export default function Configuracoes() {
       return;
     }
 
+    const name = newUserName.trim();
+    if (!name || name.length > 80) {
+      toast({ title: "Nome inválido", description: "Informe um nome (até 80 caracteres).", variant: "destructive" });
+      return;
+    }
+
     const email = newUserEmail.trim().toLowerCase();
-    if (!email || !email.includes("@")) {
+    if (!email || !email.includes("@") || email.length > 255) {
       toast({ title: "E-mail inválido", variant: "destructive" });
       return;
     }
 
-    if (!newUserPassword || newUserPassword.length < 6) {
-      toast({ title: "Senha fraca", description: "Use pelo menos 6 caracteres.", variant: "destructive" });
+    if (!newUserPassword || newUserPassword.length < 6 || newUserPassword.length > 72) {
+      toast({ title: "Senha inválida", description: "Use entre 6 e 72 caracteres.", variant: "destructive" });
       return;
     }
 
@@ -261,6 +274,7 @@ export default function Configuracoes() {
     try {
       const { data, error } = await supabase.functions.invoke("create-user", {
         body: {
+          name,
           email,
           password: newUserPassword,
           role: newUserRole,
@@ -281,6 +295,7 @@ export default function Configuracoes() {
 
       toast({ title: "Usuário criado!", description: "Já pode fazer login com CNPJ + e-mail + senha." });
       setCreateOpen(false);
+      setNewUserName("");
       setNewUserEmail("");
       setNewUserPassword("");
       setNewUserRole("atendente");
@@ -290,6 +305,49 @@ export default function Configuracoes() {
       toast({ title: "Erro ao criar usuário", description: message, variant: "destructive" });
     } finally {
       setIsCreatingUser(false);
+    }
+  };
+
+  const openEditUser = (user: UserWithRole) => {
+    setEditingUser(user);
+    setEditUserName(user.name);
+    setEditUserRole(user.role as any);
+    setEditOpen(true);
+  };
+
+  const handleUpdateUser = async () => {
+    if (!editingUser) return;
+
+    const name = editUserName.trim();
+    if (!name || name.length > 80) {
+      toast({ title: "Nome inválido", description: "Informe um nome (até 80 caracteres).", variant: "destructive" });
+      return;
+    }
+
+    setIsUpdatingUser(true);
+    try {
+      const [{ error: profileError }, { error: roleError }] = await Promise.all([
+        supabase.from("profiles").update({ name }).eq("user_id", editingUser.user_id),
+        supabase.from("user_roles").update({ role: editUserRole as any }).eq("user_id", editingUser.user_id),
+      ]);
+
+      if (profileError) throw profileError;
+      if (roleError) throw roleError;
+
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.user_id === editingUser.user_id ? { ...u, name, role: editUserRole } : u
+        )
+      );
+
+      toast({ title: "Usuário atualizado!" });
+      setEditOpen(false);
+      setEditingUser(null);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erro desconhecido";
+      toast({ title: "Erro ao atualizar usuário", description: message, variant: "destructive" });
+    } finally {
+      setIsUpdatingUser(false);
     }
   };
 
@@ -655,6 +713,19 @@ export default function Configuracoes() {
 
                       <div className="space-y-4">
                         <div className="space-y-2">
+                          <Label htmlFor="newUserName">Nome do usuário</Label>
+                          <Input
+                            id="newUserName"
+                            value={newUserName}
+                            onChange={(e) => setNewUserName(e.target.value)}
+                            placeholder="Ex: Maria Silva"
+                            className="h-12"
+                            autoComplete="name"
+                            maxLength={80}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
                           <Label htmlFor="newUserEmail">E-mail</Label>
                           <Input
                             id="newUserEmail"
@@ -664,6 +735,7 @@ export default function Configuracoes() {
                             placeholder="usuario@empresa.com"
                             className="h-12"
                             autoComplete="email"
+                            maxLength={255}
                           />
                         </div>
 
@@ -677,6 +749,7 @@ export default function Configuracoes() {
                             placeholder="Crie uma senha"
                             className="h-12"
                             autoComplete="new-password"
+                            maxLength={72}
                           />
                           <p className="text-sm text-muted-foreground">Mínimo de 6 caracteres.</p>
                         </div>
@@ -729,22 +802,72 @@ export default function Configuracoes() {
                         </div>
                       </div>
 
-                      <Select
-                        value={user.role}
-                        onValueChange={(value: "admin" | "atendente" | "tosador") => handleRoleChange(user.user_id, value)}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditUser(user)}
+                        className="gap-2"
                       >
-                        <SelectTrigger className="w-40">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="admin">Administrador</SelectItem>
-                          <SelectItem value="atendente">Atendente</SelectItem>
-                          <SelectItem value="tosador">Tosador</SelectItem>
-                        </SelectContent>
-                      </Select>
+                        <Pencil size={16} />
+                        Editar
+                      </Button>
                     </div>
                   ))}
                 </div>
+
+                <Dialog open={editOpen} onOpenChange={(open) => {
+                  setEditOpen(open);
+                  if (!open) setEditingUser(null);
+                }}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Editar usuário</DialogTitle>
+                      <DialogDescription>
+                        Atualize o nome e a permissão do usuário.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="editUserName">Nome do usuário</Label>
+                        <Input
+                          id="editUserName"
+                          value={editUserName}
+                          onChange={(e) => setEditUserName(e.target.value)}
+                          className="h-12"
+                          maxLength={80}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Permissão</Label>
+                        <Select value={editUserRole} onValueChange={(v: any) => setEditUserRole(v)}>
+                          <SelectTrigger className="h-12">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="admin">Administrador</SelectItem>
+                            <SelectItem value="atendente">Atendente</SelectItem>
+                            <SelectItem value="tosador">Tosador</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => setEditOpen(false)}
+                        disabled={isUpdatingUser}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button onClick={handleUpdateUser} disabled={isUpdatingUser}>
+                        {isUpdatingUser ? "Salvando..." : "Salvar"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
 
                 <div className="p-4 bg-accent rounded-xl">
                   <h3 className="font-medium text-foreground mb-2">Sobre as Permissões</h3>
