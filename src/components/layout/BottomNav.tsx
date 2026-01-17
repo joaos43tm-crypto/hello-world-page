@@ -1,28 +1,41 @@
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { 
-  LayoutDashboard, 
-  Calendar, 
-  Dog, 
-  ShoppingCart, 
-  Settings 
+import {
+  LayoutDashboard,
+  Calendar,
+  Dog,
+  ShoppingCart,
+  Settings,
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
-const navItems = [
-  { path: "/", label: "Início", icon: LayoutDashboard },
-  { path: "/agenda", label: "Agenda", icon: Calendar },
-  { path: "/clientes", label: "Clientes", icon: Dog },
-  { path: "/vendas", label: "PDV", icon: ShoppingCart },
-  { path: "/configuracoes", label: "Config", icon: Settings },
+type AppRole = "admin" | "atendente" | "tosador";
+
+type NavItem = {
+  path: string;
+  label: string;
+  icon: any;
+  allow: AppRole[];
+};
+
+const navItems: NavItem[] = [
+  { path: "/", label: "Início", icon: LayoutDashboard, allow: ["admin", "atendente", "tosador"] },
+  { path: "/agenda", label: "Agenda", icon: Calendar, allow: ["admin", "atendente", "tosador"] },
+  { path: "/clientes", label: "Clientes", icon: Dog, allow: ["admin", "atendente"] },
+  { path: "/vendas", label: "PDV", icon: ShoppingCart, allow: ["admin", "atendente"] },
+  { path: "/configuracoes", label: "Config", icon: Settings, allow: ["admin"] },
 ];
 
 export function BottomNav() {
   const location = useLocation();
+  const { role } = useAuth();
+
+  const visibleItems = navItems.filter((i) => !role || i.allow.includes(role as AppRole));
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50 md:hidden">
       <div className="flex items-center justify-around py-2">
-        {navItems.map((item) => {
+        {visibleItems.map((item) => {
           const isActive = location.pathname === item.path;
           const Icon = item.icon;
 
