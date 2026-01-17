@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
 import Agenda from "./pages/Agenda";
+import ConsultaMedica from "./pages/ConsultaMedica";
 import Clientes from "./pages/Clientes";
 import Vendas from "./pages/Vendas";
 import Relatorios from "./pages/Relatorios";
@@ -38,6 +39,7 @@ const App = () => (
 
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/agenda" element={<ProtectedRoute><Agenda /></ProtectedRoute>} />
+            <Route path="/consulta-medica" element={<RoleRoute allow={["admin", "atendente", "medico"]}><ConsultaMedica /></RoleRoute>} />
 
             <Route path="/clientes" element={<RoleRoute allow={["admin", "atendente"]}><Clientes /></RoleRoute>} />
             <Route path="/vendas" element={<RoleRoute allow={["admin", "atendente"]}><Vendas /></RoleRoute>} />

@@ -10,12 +10,13 @@ import {
   Package,
   Users,
   Scissors,
-  LogOut
+  LogOut,
+  Stethoscope,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 
-type AppRole = "admin" | "atendente" | "tosador";
+type AppRole = "admin" | "atendente" | "tosador" | "medico";
 
 type SidebarItem = {
   path: string;
@@ -25,8 +26,9 @@ type SidebarItem = {
 };
 
 const mainNavItems: SidebarItem[] = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard, allow: ["admin", "atendente", "tosador"] },
-  { path: "/agenda", label: "Agenda", icon: Calendar, allow: ["admin", "atendente", "tosador"] },
+  { path: "/", label: "Dashboard", icon: LayoutDashboard, allow: ["admin", "atendente", "tosador", "medico"] },
+  { path: "/agenda", label: "Agenda", icon: Calendar, allow: ["admin", "atendente", "tosador", "medico"] },
+  { path: "/consulta-medica", label: "Consulta Médica", icon: Stethoscope, allow: ["admin", "atendente", "medico"] },
   { path: "/clientes", label: "Clientes & Pets", icon: Dog, allow: ["admin", "atendente"] },
   { path: "/vendas", label: "PDV", icon: ShoppingCart, allow: ["admin", "atendente"] },
   { path: "/relatorios", label: "Relatórios", icon: BarChart3, allow: ["admin", "atendente"] },
@@ -43,7 +45,7 @@ export function Sidebar() {
   const location = useLocation();
   const { profile, role, signOut } = useAuth();
 
-  const roleLabel = role === "admin" ? "Admin" : role === "atendente" ? "Atendente" : "Tosador";
+  const roleLabel = role === "admin" ? "Admin" : role === "atendente" ? "Atendente" : role === "medico" ? "Médico" : "Tosador";
 
   return (
     <aside className="hidden md:flex flex-col w-64 bg-card border-r border-border h-screen sticky top-0">

@@ -95,14 +95,14 @@ export default function Configuracoes() {
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
-  const [newUserRole, setNewUserRole] = useState<"admin" | "atendente" | "tosador">("atendente");
+  const [newUserRole, setNewUserRole] = useState<"admin" | "atendente" | "tosador" | "medico">("atendente");
   const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   // Edit user modal
   const [editOpen, setEditOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
   const [editUserName, setEditUserName] = useState("");
-  const [editUserRole, setEditUserRole] = useState<"admin" | "atendente" | "tosador">("atendente");
+  const [editUserRole, setEditUserRole] = useState<"admin" | "atendente" | "tosador" | "medico">("atendente");
   const [isUpdatingUser, setIsUpdatingUser] = useState(false);
   const [storeName, setStoreName] = useState("");
   const [storePhone, setStorePhone] = useState("");
@@ -226,7 +226,7 @@ export default function Configuracoes() {
     }
   };
 
-  const handleRoleChange = async (userId: string, newRole: "admin" | "atendente" | "tosador") => {
+  const handleRoleChange = async (userId: string, newRole: "admin" | "atendente" | "tosador" | "medico") => {
     try {
       const { error } = await supabase
         .from("user_roles")
@@ -764,6 +764,7 @@ export default function Configuracoes() {
                               <SelectItem value="admin">Administrador</SelectItem>
                               <SelectItem value="atendente">Atendente</SelectItem>
                               <SelectItem value="tosador">Tosador</SelectItem>
+                              <SelectItem value="medico">Médico</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -849,6 +850,7 @@ export default function Configuracoes() {
                             <SelectItem value="admin">Administrador</SelectItem>
                             <SelectItem value="atendente">Atendente</SelectItem>
                             <SelectItem value="tosador">Tosador</SelectItem>
+                            <SelectItem value="medico">Médico</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -875,6 +877,7 @@ export default function Configuracoes() {
                     <li><strong>Administrador:</strong> Acesso total ao sistema</li>
                     <li><strong>Atendente:</strong> Agenda, clientes, vendas e relatórios</li>
                     <li><strong>Tosador:</strong> Visualizar agenda e atualizar status</li>
+                    <li><strong>Médico:</strong> Agenda e Consulta Médica</li>
                   </ul>
                 </div>
               </div>

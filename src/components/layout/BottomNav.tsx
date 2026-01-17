@@ -6,10 +6,11 @@ import {
   Dog,
   ShoppingCart,
   Settings,
+  Stethoscope,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
-type AppRole = "admin" | "atendente" | "tosador";
+type AppRole = "admin" | "atendente" | "tosador" | "medico";
 
 type NavItem = {
   path: string;
@@ -19,8 +20,9 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { path: "/", label: "Início", icon: LayoutDashboard, allow: ["admin", "atendente", "tosador"] },
-  { path: "/agenda", label: "Agenda", icon: Calendar, allow: ["admin", "atendente", "tosador"] },
+  { path: "/", label: "Início", icon: LayoutDashboard, allow: ["admin", "atendente", "tosador", "medico"] },
+  { path: "/agenda", label: "Agenda", icon: Calendar, allow: ["admin", "atendente", "tosador", "medico"] },
+  { path: "/consulta-medica", label: "Consulta", icon: Stethoscope, allow: ["admin", "atendente", "medico"] },
   { path: "/clientes", label: "Clientes", icon: Dog, allow: ["admin", "atendente"] },
   { path: "/vendas", label: "PDV", icon: ShoppingCart, allow: ["admin", "atendente"] },
   { path: "/configuracoes", label: "Config", icon: Settings, allow: ["admin"] },

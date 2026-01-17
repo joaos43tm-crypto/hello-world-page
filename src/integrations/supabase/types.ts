@@ -141,6 +141,71 @@ export type Database = {
           },
         ]
       }
+      medical_consultations: {
+        Row: {
+          created_at: string
+          created_by: string
+          ended_at: string | null
+          id: string
+          notes: string | null
+          office_id: string
+          started_at: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          ended_at?: string | null
+          id?: string
+          notes?: string | null
+          office_id: string
+          started_at?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          ended_at?: string | null
+          id?: string
+          notes?: string | null
+          office_id?: string
+          started_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medical_consultations_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "medical_offices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      medical_offices: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       packages: {
         Row: {
           created_at: string | null
