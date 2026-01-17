@@ -1,0 +1,207 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* PetControl Design System - Pet Shop Management */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@layer base {
+  :root {
+    /* Brand Colors */
+    --primary: 145 63% 49%; /* #2ECC71 Verde Principal */
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 204 70% 53%; /* #2D9CDB Azul de Apoio */
+    --secondary-foreground: 0 0% 100%;
+    
+    /* Backgrounds */
+    --background: 216 33% 97%; /* #F5F7FA Fundo Claro */
+    --foreground: 0 0% 31%; /* #4F4F4F Texto Principal */
+    
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 31%;
+    
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 31%;
+    
+    /* Status Colors */
+    --status-scheduled: 45 100% 51%; /* Amarelo - Agendado */
+    --status-in-progress: 204 70% 53%; /* Azul - Em Atendimento */
+    --status-waiting: 28 87% 55%; /* Laranja - Aguardando Busca */
+    --status-completed: 145 63% 49%; /* Verde - Finalizado */
+    
+    /* UI Colors */
+    --muted: 216 20% 95%;
+    --muted-foreground: 0 0% 45%;
+    
+    --accent: 145 63% 95%;
+    --accent-foreground: 145 63% 30%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 216 20% 90%;
+    --input: 216 20% 90%;
+    --ring: 145 63% 49%;
+    
+    --radius: 1rem;
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.1), 0 2px 4px -2px hsl(0 0% 0% / 0.1);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.1), 0 4px 6px -4px hsl(0 0% 0% / 0.1);
+    --shadow-card: 0 2px 8px -2px hsl(0 0% 0% / 0.08), 0 4px 16px -4px hsl(0 0% 0% / 0.08);
+    
+    /* Sidebar */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 31%;
+    --sidebar-primary: 145 63% 49%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 145 63% 95%;
+    --sidebar-accent-foreground: 145 63% 30%;
+    --sidebar-border: 216 20% 90%;
+    --sidebar-ring: 145 63% 49%;
+  }
+
+  .dark {
+    --background: 220 20% 10%;
+    --foreground: 0 0% 95%;
+    
+    --card: 220 20% 14%;
+    --card-foreground: 0 0% 95%;
+    
+    --popover: 220 20% 14%;
+    --popover-foreground: 0 0% 95%;
+    
+    --primary: 145 63% 49%;
+    --primary-foreground: 0 0% 100%;
+    
+    --secondary: 204 70% 53%;
+    --secondary-foreground: 0 0% 100%;
+    
+    --muted: 220 20% 18%;
+    --muted-foreground: 0 0% 65%;
+    
+    --accent: 145 63% 20%;
+    --accent-foreground: 145 63% 80%;
+    
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 220 20% 20%;
+    --input: 220 20% 20%;
+    --ring: 145 63% 49%;
+    
+    --sidebar-background: 220 20% 12%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 145 63% 49%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 145 63% 20%;
+    --sidebar-accent-foreground: 145 63% 80%;
+    --sidebar-border: 220 20% 20%;
+    --sidebar-ring: 145 63% 49%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+@layer components {
+  /* Status Badge Styles */
+  .status-agendado {
+    @apply bg-yellow-100 text-yellow-800 border-yellow-300;
+  }
+  
+  .status-em_atendimento {
+    @apply bg-blue-100 text-blue-800 border-blue-300;
+  }
+  
+  .status-aguardando_busca {
+    @apply bg-orange-100 text-orange-800 border-orange-300;
+  }
+  
+  .status-finalizado {
+    @apply bg-green-100 text-green-800 border-green-300;
+  }
+  
+  /* Card Styles */
+  .pet-card {
+    @apply bg-card rounded-2xl p-4 shadow-[var(--shadow-card)] border border-border/50 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+  }
+  
+  /* Navigation Styles */
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground font-medium transition-all duration-200 hover:bg-accent hover:text-accent-foreground;
+  }
+  
+  .nav-item-active {
+    @apply bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground;
+  }
+  
+  /* Action Button Styles */
+  .action-btn {
+    @apply flex items-center justify-center gap-2 px-6 py-4 rounded-xl font-semibold text-base transition-all duration-200 active:scale-95;
+  }
+  
+  /* Floating Action Button */
+  .fab {
+    @apply fixed bottom-6 right-6 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-xl active:scale-95 z-50;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.4s ease-out;
+  }
+  
+  .animate-scale-in {
+    animation: scaleIn 0.3s ease-out;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  @keyframes slideUp {
+    from { 
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to { 
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  @keyframes scaleIn {
+    from { 
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to { 
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+}
