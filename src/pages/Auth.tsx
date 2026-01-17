@@ -13,12 +13,19 @@ const emailSchema = z.string().email("E-mail inválido");
 const passwordSchema = z.string().min(6, "Senha deve ter pelo menos 6 caracteres");
 const codeSchema = z.string().min(4, "Código de cadastro é obrigatório");
 
+const normalizeCnpj = (value: string) => value.replace(/\D/g, "");
+const cnpjSchema = z
+  .string()
+  .transform((v) => normalizeCnpj(v))
+  .refine((v) => v.length === 14, "CNPJ deve ter 14 dígitos");
+
 export default function Auth() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, signIn, signUp, isLoading } = useAuth();
   
   const [mode, setMode] = useState<"login" | "signup">("login");
+  const [cnpj, setCnpj] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [registrationCode, setRegistrationCode] = useState("");
@@ -30,7 +37,7 @@ export default function Auth() {
     cnpj?: string;
     companyName?: string;
   } | null>(null);
-  const [errors, setErrors] = useState<{ email?: string; password?: string; code?: string }>({});
+  const [errors, setErrors] = useState<{ cnpj?: string; email?: string; password?: string; code?: string }>({});
 
   // Redirect if already logged in
   useEffect(() => {
@@ -75,7 +82,14 @@ export default function Auth() {
 
   const validateForm = () => {
     const newErrors: typeof errors = {};
-    
+
+    if (mode === "login") {
+      const parsed = cnpjSchema.safeParse(cnpj);
+      if (!parsed.success) {
+        newErrors.cnpj = parsed.error.errors[0]?.message ?? "CNPJ inválido";
+      }
+    }
+
     try {
       emailSchema.parse(email);
     } catch (e) {
@@ -136,11 +150,54 @@ export default function Auth() {
             });
           }
         } else {
+          // Enforce company login (CNPJ must match the authenticated user's profile)
+          const typedCnpj = normalizeCnpj(cnpj);
+          const { data: userData } = await supabase.auth.getUser();
+
+          const userId = userData.user?.id;
+          if (!userId) {
+            await supabase.auth.signOut();
+            toast({
+              title: "Sessão inválida",
+              description: "Faça login novamente.",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          const { data: profileData, error: profileError } = await supabase
+            .from("profiles")
+            .select("cnpj")
+            .eq("user_id", userId)
+            .maybeSingle();
+
+          if (profileError || !profileData?.cnpj) {
+            await supabase.auth.signOut();
+            toast({
+              title: "Empresa não vinculada",
+              description: "Seu usuário não está vinculado a nenhuma empresa.",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          const profileCnpj = normalizeCnpj(profileData.cnpj);
+          if (profileCnpj !== typedCnpj) {
+            await supabase.auth.signOut();
+            toast({
+              title: "Acesso negado",
+              description: "Este e-mail não pertence ao CNPJ informado.",
+              variant: "destructive",
+            });
+            return;
+          }
+
           try {
             await supabase.functions.invoke("bootstrap-user", { body: {} });
-          } catch (e) {
-            console.warn("bootstrap-user failed (non-blocking):", e);
+          } catch {
+            // non-blocking
           }
+
           toast({ title: "Bem-vindo! 🐾" });
           navigate("/");
         }
@@ -309,6 +366,25 @@ export default function Auth() {
                   </div>
                 )}
               </>
+            )}
+
+            {mode === "login" && (
+              <div className="space-y-2">
+                <Label htmlFor="cnpj" className="flex items-center gap-2">
+                  <FileText size={16} />
+                  CNPJ
+                </Label>
+                <Input
+                  id="cnpj"
+                  type="text"
+                  value={cnpj}
+                  onChange={(e) => setCnpj(e.target.value)}
+                  placeholder="00.000.000/0000-00"
+                  className="h-12"
+                  inputMode="numeric"
+                />
+                {errors.cnpj && <p className="text-sm text-destructive">{errors.cnpj}</p>}
+              </div>
             )}
 
             <div className="space-y-2">
