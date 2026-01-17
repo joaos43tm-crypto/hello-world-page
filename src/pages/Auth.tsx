@@ -136,6 +136,11 @@ export default function Auth() {
             });
           }
         } else {
+          try {
+            await supabase.functions.invoke("bootstrap-user", { body: {} });
+          } catch (e) {
+            console.warn("bootstrap-user failed (non-blocking):", e);
+          }
           toast({ title: "Bem-vindo! 🐾" });
           navigate("/");
         }
@@ -171,6 +176,13 @@ export default function Auth() {
             _code: registrationCode.toUpperCase(),
             _user_id: (await supabase.auth.getUser()).data.user?.id
           });
+
+          // Ensure the first account gets admin privileges
+          try {
+            await supabase.functions.invoke("bootstrap-user", { body: {} });
+          } catch (e) {
+            console.warn("bootstrap-user failed (non-blocking):", e);
+          }
 
           toast({ 
             title: "Conta criada! 🎉",

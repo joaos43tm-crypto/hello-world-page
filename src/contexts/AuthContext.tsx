@@ -37,6 +37,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserData = async (userId: string) => {
     try {
+      // Ensure the user has a role/profile (first account becomes admin)
+      try {
+        await supabase.functions.invoke("bootstrap-user", { body: {} });
+      } catch (e) {
+        console.warn("bootstrap-user failed (non-blocking):", e);
+      }
+
       // Fetch profile
       const { data: profileData } = await supabase
         .from("profiles")
