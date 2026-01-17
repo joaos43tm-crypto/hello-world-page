@@ -12,6 +12,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { 
   Settings, 
   Store,
@@ -26,12 +35,14 @@ import {
   Image,
   Users,
   Shield,
-  LogOut
+  LogOut,
+  Plus
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+
 
 interface StoreSettings {
   id: string;
@@ -78,6 +89,13 @@ export default function Configuracoes() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Create user modal
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserRole, setNewUserRole] = useState<"admin" | "atendente" | "tosador">("atendente");
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+
   // Form state
   const [storeName, setStoreName] = useState("");
   const [storePhone, setStorePhone] = useState("");
@@ -92,6 +110,39 @@ export default function Configuracoes() {
   const [printerType, setPrinterType] = useState("bluetooth");
   const [printerAddress, setPrinterAddress] = useState("");
   const [plansEnabled, setPlansEnabled] = useState(false);
+
+  const loadUsers = async () => {
+    if (!isAdmin || !profile?.cnpj) return;
+
+    const { data: profilesData, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, user_id, name")
+      .eq("cnpj", profile.cnpj);
+
+    if (profilesError) {
+      console.error("Error loading users (profiles):", profilesError);
+      return;
+    }
+
+    const userIds = (profilesData ?? []).map((p) => p.user_id);
+
+    const { data: rolesData, error: rolesError } = await supabase
+      .from("user_roles")
+      .select("user_id, role")
+      .in("user_id", userIds.length ? userIds : ["00000000-0000-0000-0000-000000000000"]);
+
+    if (rolesError) {
+      console.error("Error loading users (roles):", rolesError);
+      return;
+    }
+
+    const usersWithRoles = (profilesData ?? []).map((p) => ({
+      ...p,
+      role: rolesData?.find((r) => r.user_id === p.user_id)?.role || "atendente",
+    }));
+
+    setUsers(usersWithRoles);
+  };
 
   const loadSettings = async () => {
     setIsLoading(true);
@@ -121,24 +172,7 @@ export default function Configuracoes() {
         setPlansEnabled(data.plans_enabled || false);
       }
 
-      // Load users with roles
-      if (isAdmin) {
-        const { data: profilesData } = await supabase
-          .from("profiles")
-          .select("id, user_id, name");
-
-        const { data: rolesData } = await supabase
-          .from("user_roles")
-          .select("user_id, role");
-
-        if (profilesData && rolesData) {
-          const usersWithRoles = profilesData.map(p => ({
-            ...p,
-            role: rolesData.find(r => r.user_id === p.user_id)?.role || "atendente",
-          }));
-          setUsers(usersWithRoles);
-        }
-      }
+      await loadUsers();
     } catch (error) {
       console.error("Error loading settings:", error);
     } finally {
@@ -148,7 +182,7 @@ export default function Configuracoes() {
 
   useEffect(() => {
     loadSettings();
-  }, [isAdmin]);
+  }, [isAdmin, profile?.cnpj]);
 
   const handleSave = async () => {
     if (!settings?.id || !isAdmin) return;
@@ -199,6 +233,63 @@ export default function Configuracoes() {
     } catch (error) {
       console.error("Error updating role:", error);
       toast({ title: "Erro ao atualizar", variant: "destructive" });
+    }
+  };
+
+  const handleCreateUser = async () => {
+    if (!profile?.cnpj) {
+      toast({
+        title: "Empresa não configurada",
+        description: "Seu usuário não tem CNPJ vinculado.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const email = newUserEmail.trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      toast({ title: "E-mail inválido", variant: "destructive" });
+      return;
+    }
+
+    if (!newUserPassword || newUserPassword.length < 6) {
+      toast({ title: "Senha fraca", description: "Use pelo menos 6 caracteres.", variant: "destructive" });
+      return;
+    }
+
+    setIsCreatingUser(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-user", {
+        body: {
+          email,
+          password: newUserPassword,
+          role: newUserRole,
+          cnpj: profile.cnpj,
+          company_name: profile.company_name || settings?.store_name || null,
+        },
+      });
+
+      if (error) {
+        toast({ title: "Erro ao criar usuário", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      if (data?.error) {
+        toast({ title: "Erro ao criar usuário", description: data.error, variant: "destructive" });
+        return;
+      }
+
+      toast({ title: "Usuário criado!", description: "Já pode fazer login com CNPJ + e-mail + senha." });
+      setCreateOpen(false);
+      setNewUserEmail("");
+      setNewUserPassword("");
+      setNewUserRole("atendente");
+      await loadUsers();
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erro desconhecido";
+      toast({ title: "Erro ao criar usuário", description: message, variant: "destructive" });
+    } finally {
+      setIsCreatingUser(false);
     }
   };
 
@@ -541,10 +632,86 @@ export default function Configuracoes() {
             {/* Users Tab (Admin only) */}
             {activeTab === "users" && isAdmin && (
               <div className="pet-card space-y-6 animate-fade-in">
-                <h2 className="font-semibold text-foreground flex items-center gap-2">
-                  <Users size={20} />
-                  Usuários e Permissões
-                </h2>
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="font-semibold text-foreground flex items-center gap-2">
+                    <Users size={20} />
+                    Usuários e Permissões
+                  </h2>
+
+                  <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="gap-2">
+                        <Plus size={18} />
+                        Criar usuário
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Criar usuário</DialogTitle>
+                        <DialogDescription>
+                          Este usuário ficará vinculado ao CNPJ da sua empresa e só conseguirá entrar com o mesmo CNPJ.
+                        </DialogDescription>
+                      </DialogHeader>
+
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="newUserEmail">E-mail</Label>
+                          <Input
+                            id="newUserEmail"
+                            type="email"
+                            value={newUserEmail}
+                            onChange={(e) => setNewUserEmail(e.target.value)}
+                            placeholder="usuario@empresa.com"
+                            className="h-12"
+                            autoComplete="email"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="newUserPassword">Senha</Label>
+                          <Input
+                            id="newUserPassword"
+                            type="password"
+                            value={newUserPassword}
+                            onChange={(e) => setNewUserPassword(e.target.value)}
+                            placeholder="Crie uma senha"
+                            className="h-12"
+                            autoComplete="new-password"
+                          />
+                          <p className="text-sm text-muted-foreground">Mínimo de 6 caracteres.</p>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>Permissão</Label>
+                          <Select value={newUserRole} onValueChange={(v: any) => setNewUserRole(v)}>
+                            <SelectTrigger className="h-12">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Administrador</SelectItem>
+                              <SelectItem value="atendente">Atendente</SelectItem>
+                              <SelectItem value="tosador">Tosador</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <DialogFooter>
+                        <Button
+                          variant="outline"
+                          onClick={() => setCreateOpen(false)}
+                          disabled={isCreatingUser}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button onClick={handleCreateUser} disabled={isCreatingUser} className="gap-2">
+                          <Plus size={18} />
+                          {isCreatingUser ? "Criando..." : "Criar"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
 
                 <div className="space-y-3">
                   {users.map((user) => (
@@ -561,7 +728,7 @@ export default function Configuracoes() {
                           <p className="text-sm text-muted-foreground capitalize">{user.role}</p>
                         </div>
                       </div>
-                      
+
                       <Select
                         value={user.role}
                         onValueChange={(value: "admin" | "atendente" | "tosador") => handleRoleChange(user.user_id, value)}
