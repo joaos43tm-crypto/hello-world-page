@@ -13,6 +13,7 @@ import {
 import { Calendar, Clock, Save, Dog, Scissors, User } from "lucide-react";
 import type { Pet, Service, Professional } from "@/lib/petcontrol.api";
 import { petsApi, servicesApi, professionalsApi } from "@/lib/petcontrol.api";
+import { isoDateInTimeZone } from "@/lib/date";
 
 interface AppointmentFormProps {
   onSave: (data: {
@@ -45,7 +46,7 @@ export function AppointmentForm({
   const [petId, setPetId] = useState(defaultPetId || "");
   const [serviceId, setServiceId] = useState(defaultServiceId || "");
   const [professionalId, setProfessionalId] = useState("");
-  const [date, setDate] = useState(defaultDate || new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(defaultDate || isoDateInTimeZone());
   const [time, setTime] = useState("09:00");
   const [notes, setNotes] = useState("");
 

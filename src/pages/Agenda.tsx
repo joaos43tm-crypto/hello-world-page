@@ -23,6 +23,7 @@ import {
   type Appointment,
   type AppointmentStatus,
 } from "@/lib/petcontrol.api";
+import { isoDateInTimeZone } from "@/lib/date";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -31,7 +32,7 @@ export default function Agenda() {
   const { role } = useAuth();
   const canCreateAppointment = role === "admin" || role === "atendente";
 
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(isoDateInTimeZone());
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showNewAppointment, setShowNewAppointment] = useState(false);
@@ -115,7 +116,7 @@ export default function Agenda() {
     });
   };
 
-  const isToday = selectedDate === new Date().toISOString().split('T')[0];
+  const isToday = selectedDate === isoDateInTimeZone();
 
   return (
     <MainLayout>
@@ -186,14 +187,14 @@ export default function Agenda() {
           <Button
             variant={isToday ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+            onClick={() => setSelectedDate(isoDateInTimeZone())}
           >
             Hoje
           </Button>
           {[1, 2, 3, 4, 5, 6].map(i => {
             const date = new Date();
             date.setDate(date.getDate() + i);
-            const dateStr = date.toISOString().split('T')[0];
+            const dateStr = isoDateInTimeZone(date);
             const dayName = date.toLocaleDateString('pt-BR', { weekday: 'short' });
             
             return (
