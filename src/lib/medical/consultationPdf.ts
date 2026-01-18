@@ -26,16 +26,18 @@ export type ConsultationPdfInput = {
      */
     notes?: string | null;
     /**
-     * Seções estruturadas para o PDF (ex: Queixa, Exame, Diagnóstico, Conduta).
+     * Seções estruturadas para o PDF (ex: Queixa, Exame, Diagnóstico, Conduta, Prescrição).
      */
     sections?: Array<{ title: string; content: string }>;
   };
   professional?: {
     name?: string | null;
     title?: string | null;
+    crmv?: string | null;
   };
   options?: {
     includeCoverPage?: boolean;
+    includeCrmv?: boolean;
   };
 };
 
@@ -94,7 +96,8 @@ export async function generateConsultationPdf(input: ConsultationPdfInput) {
 
   const pageSize: [number, number] = [595.28, 841.89]; // A4
   const marginX = 42;
-  const bottomMargin = 56;
+  const footerReservedH = 70; // espaço para assinatura
+  const bottomMargin = 18 + footerReservedH;
   let page = pdfDoc.addPage(pageSize);
   let y = 806;
 
@@ -336,14 +339,30 @@ export async function generateConsultationPdf(input: ConsultationPdfInput) {
   const drawSection = (title: string, content: string) => {
     if (usedLines >= availableLinesTotal) return false;
 
+    const isPrescription = /prescri/i.test(title);
+
     // Title line
     drawText(title, { bold: true, size: 11 });
     usedLines += 1;
 
-    const rawLines = wrapText(content, 115);
-
-    // Remaining lines for content
     const remaining = Math.max(0, availableLinesTotal - usedLines);
+    if (remaining <= 0) return false;
+
+    // For prescription, render as bullet list (1 item per line).
+    const rawLines = isPrescription
+      ? content
+          .replace(/\r\n/g, "\n")
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .flatMap((item) => {
+            const wrapped = wrapText(item, 108);
+            return wrapped.map((line, idx) =>
+              idx === 0 ? `• ${line}` : `  ${line}`
+            );
+          })
+      : wrapText(content, 115);
+
     const needsCut = rawLines.length > remaining;
     const renderLines = needsCut
       ? rawLines.slice(0, Math.max(0, remaining - 1))
@@ -375,6 +394,60 @@ export async function generateConsultationPdf(input: ConsultationPdfInput) {
     const ok = drawSection(s.title, s.content);
     if (!ok) break;
   }
+
+  // --- Footer signature (sempre na mesma página)
+  const { width: w } = page.getSize();
+  const now = new Date().toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  // Linha separadora
+  page.drawRectangle({
+    x: marginX,
+    y: bottomMargin - 14,
+    width: w - marginX * 2,
+    height: 1,
+    color: rgb(0.8, 0.84, 0.9),
+  });
+
+  const signatureY = bottomMargin - 40;
+  const profName = (input.professional?.name ?? "").trim();
+  const profTitle = (input.professional?.title ?? "").trim();
+  const profCrmv = (input.professional?.crmv ?? "").trim();
+  const includeCrmv = input.options?.includeCrmv === true;
+
+  const centerText = (text: string, yPos: number, size: number, bold?: boolean) => {
+    const f = bold ? fontBold : font;
+    const textW = f.widthOfTextAtSize(text, size);
+    page.drawText(text, {
+      x: (w - textW) / 2,
+      y: yPos,
+      size,
+      font: f,
+      color: rgb(0.05, 0.18, 0.32),
+    });
+  };
+
+  if (profName) {
+    centerText(profName, signatureY + 18, 11, true);
+    if (profTitle) centerText(profTitle, signatureY + 4, 9, false);
+    if (includeCrmv && profCrmv) centerText(profCrmv, signatureY - 8, 9, false);
+  }
+
+  // Data/hora no canto direito
+  const dateSize = 9;
+  const dateW = font.widthOfTextAtSize(now, dateSize);
+  page.drawText(now, {
+    x: w - marginX - dateW,
+    y: signatureY - 8,
+    size: dateSize,
+    font,
+    color: rgb(0.35, 0.42, 0.52),
+  });
 
   const pdfBytes = await pdfDoc.save();
   const bytes = new Uint8Array(pdfBytes);
