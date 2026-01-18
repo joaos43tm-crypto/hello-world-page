@@ -57,7 +57,7 @@ const todayISODate = () => isoDateInTimeZone(new Date(), "America/Sao_Paulo");
 
 export default function ConsultaMedica() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile, role } = useAuth();
 
   // Our generated DB types may lag behind newly created tables.
   const db = supabase as any;
@@ -458,6 +458,18 @@ export default function ConsultaMedica() {
           ended_at: current.ended_at,
           office_name: current.office?.name ?? null,
           notes: notesDraft,
+        },
+        professional: {
+          name: profile?.name ?? null,
+          title:
+            role === "medico"
+              ? "MÉDICO VETERINÁRIO"
+              : role
+                ? role.toUpperCase()
+                : null,
+        },
+        options: {
+          includeCoverPage: true,
         },
       });
 

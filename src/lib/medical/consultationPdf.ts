@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 export type ConsultationPdfInput = {
   store: {
@@ -22,6 +22,13 @@ export type ConsultationPdfInput = {
     ended_at?: string | null;
     office_name?: string | null;
     notes?: string | null;
+  };
+  professional?: {
+    name?: string | null;
+    title?: string | null;
+  };
+  options?: {
+    includeCoverPage?: boolean;
   };
 };
 
@@ -74,17 +81,27 @@ function wrapText(text: string, maxChars: number) {
 
 export async function generateConsultationPdf(input: ConsultationPdfInput) {
   const pdfDoc = await PDFDocument.create();
-  let page = pdfDoc.addPage([595.28, 841.89]); // A4
 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
+  const pageSize: [number, number] = [595.28, 841.89]; // A4
   const marginX = 48;
+  let page = pdfDoc.addPage(pageSize);
   let y = 800;
   const lineH = 14;
 
+  const storeName = input.store.store_name?.trim() || "Nome do PetShop";
+
+  const drawText = (text: string, opts?: { bold?: boolean; size?: number; x?: number }) => {
+    const size = opts?.size ?? 12;
+    const chosenFont = opts?.bold ? fontBold : font;
+    page.drawText(text, { x: opts?.x ?? marginX, y, size, font: chosenFont });
+    y -= lineH + (size - 12) * 0.2;
+  };
+
   const newPage = (title?: string) => {
-    page = pdfDoc.addPage([595.28, 841.89]);
+    page = pdfDoc.addPage(pageSize);
     y = 800;
     if (title) {
       drawText(title, { bold: true, size: 14 });
@@ -92,15 +109,106 @@ export async function generateConsultationPdf(input: ConsultationPdfInput) {
     }
   };
 
-  const drawText = (text: string, opts?: { bold?: boolean; size?: number }) => {
-    const size = opts?.size ?? 12;
-    const chosenFont = opts?.bold ? fontBold : font;
-    page.drawText(text, { x: marginX, y, size, font: chosenFont });
-    y -= lineH + (size - 12) * 0.2;
-  };
+  const includeCoverPage = input.options?.includeCoverPage !== false;
+
+  if (includeCoverPage) {
+    // --- Cover page (modelo semelhante à imagem)
+    const { width: w, height: h } = page.getSize();
+    const topBarH = 10;
+    const bottomBarH = 10;
+
+    // top/bottom bars
+    page.drawRectangle({ x: 0, y: h - topBarH, width: w, height: topBarH, color: rgb(0.20, 0.75, 0.40) });
+    page.drawRectangle({ x: 0, y: 0, width: w, height: bottomBarH, color: rgb(0.20, 0.75, 0.40) });
+
+    // subtle border
+    page.drawRectangle({
+      x: 12,
+      y: 12,
+      width: w - 24,
+      height: h - 24,
+      borderColor: rgb(0.20, 0.75, 0.40),
+      borderWidth: 2,
+      opacity: 0.65,
+    });
+
+    // simple watermark paw-like shapes
+    const watermark = () => {
+      const baseColor = rgb(0.55, 0.60, 0.68);
+      const paw = (cx: number, cy: number, s: number) => {
+        // pad
+        page.drawEllipse({ x: cx, y: cy, xScale: 26 * s, yScale: 22 * s, color: baseColor, opacity: 0.08 });
+        // toes
+        page.drawEllipse({ x: cx - 18 * s, y: cy + 26 * s, xScale: 10 * s, yScale: 14 * s, color: baseColor, opacity: 0.08 });
+        page.drawEllipse({ x: cx, y: cy + 32 * s, xScale: 10 * s, yScale: 14 * s, color: baseColor, opacity: 0.08 });
+        page.drawEllipse({ x: cx + 18 * s, y: cy + 26 * s, xScale: 10 * s, yScale: 14 * s, color: baseColor, opacity: 0.08 });
+      };
+      paw(w * 0.70, h * 0.62, 1.1);
+      paw(w * 0.58, h * 0.48, 0.9);
+      paw(w * 0.80, h * 0.42, 0.8);
+    };
+    watermark();
+
+    // "logo" block + store name
+    const logoX = marginX;
+    const logoY = h - 140;
+    page.drawRectangle({ x: logoX, y: logoY, width: 34, height: 34, color: rgb(0.20, 0.75, 0.40) });
+    page.drawText("PC", {
+      x: logoX + 8,
+      y: logoY + 10,
+      size: 14,
+      font: fontBold,
+      color: rgb(1, 1, 1),
+    });
+
+    // store name centered-ish as in sample
+    const titleSize = 22;
+    const titleWidth = fontBold.widthOfTextAtSize(storeName, titleSize);
+    page.drawText(storeName, {
+      x: Math.max(marginX + 44, (w - titleWidth) / 2),
+      y: logoY + 10,
+      size: titleSize,
+      font: fontBold,
+      color: rgb(0.05, 0.18, 0.32),
+    });
+
+    // footer professional
+    const profName = (input.professional?.name ?? "").trim();
+    const profTitle = (input.professional?.title ?? "").trim();
+    const footerY = 110;
+
+    if (profName) {
+      const nSize = 12;
+      const nW = fontBold.widthOfTextAtSize(profName, nSize);
+      page.drawText(profName, {
+        x: (w - nW) / 2,
+        y: footerY,
+        size: nSize,
+        font: fontBold,
+        color: rgb(0.05, 0.18, 0.32),
+      });
+
+      if (profTitle) {
+        const tSize = 9;
+        const tW = font.widthOfTextAtSize(profTitle, tSize);
+        page.drawText(profTitle, {
+          x: (w - tW) / 2,
+          y: footerY - 14,
+          size: tSize,
+          font,
+          color: rgb(0.15, 0.55, 0.75),
+        });
+      }
+    }
+
+    // Start the report on a new page
+    newPage();
+  }
+
+  // --- Report content
+  y = 800;
 
   // Header
-  const storeName = input.store.store_name?.trim() || "Consulta";
   drawText(storeName, { bold: true, size: 16 });
 
   const contactBits = [input.store.phone, input.store.email].filter(Boolean).join(" • ");
