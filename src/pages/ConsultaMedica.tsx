@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -14,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { generateConsultationPdf } from "@/lib/medical/consultationPdf";
+import { isoDateInTimeZone } from "@/lib/date";
 import { FileDown, Stethoscope } from "lucide-react";
 
 type MedicalOffice = {
@@ -51,13 +53,7 @@ const formatDateTime = (iso: string) =>
     minute: "2-digit",
   });
 
-const todayISODate = () => {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-};
+const todayISODate = () => isoDateInTimeZone(new Date(), "America/Sao_Paulo");
 
 export default function ConsultaMedica() {
   const { toast } = useToast();
@@ -68,6 +64,8 @@ export default function ConsultaMedica() {
 
   const [offices, setOffices] = useState<MedicalOffice[]>([]);
   const [officeId, setOfficeId] = useState<string>("");
+
+  const [queryDate, setQueryDate] = useState<string>(todayISODate());
 
   const [appointments, setAppointments] = useState<TodayAppointment[]>([]);
   const [appointmentId, setAppointmentId] = useState<string>("");
@@ -132,9 +130,7 @@ export default function ConsultaMedica() {
     return ids;
   };
 
-  const loadTodayAppointments = async (serviceIds: string[]) => {
-    const today = todayISODate();
-
+  const loadTodayAppointments = async (serviceIds: string[], date: string) => {
     if (serviceIds.length === 0) {
       setAppointments([]);
       return;
@@ -143,7 +139,7 @@ export default function ConsultaMedica() {
     const { data: appts, error: apptsError } = await supabase
       .from("appointments")
       .select("id,pet_id,scheduled_time,status,service_id")
-      .eq("scheduled_date", today)
+      .eq("scheduled_date", date)
       .eq("status", "agendado")
       .in("service_id", serviceIds)
       .order("scheduled_time", { ascending: true });
@@ -263,7 +259,7 @@ export default function ConsultaMedica() {
     const load = async () => {
       await loadOffices();
       const ids = await loadMedicalServices();
-      await loadTodayAppointments(ids);
+      await loadTodayAppointments(ids, queryDate);
       if (mounted) await loadCurrentConsultation();
     };
 
@@ -273,7 +269,7 @@ export default function ConsultaMedica() {
       mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, queryDate]);
 
   useEffect(() => {
     if (!selectedAppointment) {
@@ -568,9 +564,23 @@ export default function ConsultaMedica() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Selecionar consulta agendada (hoje)</CardTitle>
+            <CardTitle>Selecionar consulta agendada</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Data</label>
+              <Input
+                type="date"
+                value={queryDate}
+                onChange={(e) => setQueryDate(e.target.value)}
+                disabled={!!current}
+                className="w-fit"
+              />
+              <p className="text-xs text-muted-foreground">
+                Mostrando consultas com status <span className="font-medium">agendado</span>.
+              </p>
+            </div>
+
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Cliente / Pet</label>
               <Select value={appointmentId} onValueChange={setAppointmentId} disabled={!!current}>
@@ -578,7 +588,7 @@ export default function ConsultaMedica() {
                   <SelectValue
                     placeholder={
                       appointments.length === 0
-                        ? "Nenhum agendamento para hoje"
+                        ? "Nenhuma consulta agendada para esta data"
                         : "Selecione um agendamento"
                     }
                   />
