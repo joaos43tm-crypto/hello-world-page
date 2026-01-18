@@ -8,7 +8,6 @@ import {
   BarChart3,
   Settings,
   Package,
-  Users,
   Scissors,
   LogOut,
   Stethoscope,
@@ -37,7 +36,6 @@ const mainNavItems: SidebarItem[] = [
 const settingsNavItems: SidebarItem[] = [
   { path: "/servicos", label: "Serviços", icon: Scissors, allow: ["admin"] },
   { path: "/produtos", label: "Produtos", icon: Package, allow: ["admin"] },
-  { path: "/profissionais", label: "Profissionais", icon: Users, allow: ["admin"] },
   { path: "/configuracoes", label: "Configurações", icon: Settings, allow: ["admin"] },
 ];
 
