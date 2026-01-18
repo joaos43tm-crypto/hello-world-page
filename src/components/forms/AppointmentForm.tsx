@@ -26,22 +26,30 @@ interface AppointmentFormProps {
   }) => Promise<void>;
   defaultDate?: string;
   defaultPetId?: string;
+  defaultServiceId?: string;
+  lockService?: boolean;
 }
 
-export function AppointmentForm({ onSave, defaultDate, defaultPetId }: AppointmentFormProps) {
+export function AppointmentForm({
+  onSave,
+  defaultDate,
+  defaultPetId,
+  defaultServiceId,
+  lockService,
+}: AppointmentFormProps) {
   const [pets, setPets] = useState<Pet[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const [petId, setPetId] = useState(defaultPetId || "");
-  const [serviceId, setServiceId] = useState("");
+  const [serviceId, setServiceId] = useState(defaultServiceId || "");
   const [professionalId, setProfessionalId] = useState("");
   const [date, setDate] = useState(defaultDate || new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState("09:00");
   const [notes, setNotes] = useState("");
 
-  const selectedService = services.find(s => s.id === serviceId);
+  const selectedService = services.find((s) => s.id === serviceId);
 
   useEffect(() => {
     const loadData = async () => {
@@ -101,24 +109,39 @@ export function AppointmentForm({ onSave, defaultDate, defaultPetId }: Appointme
       </div>
 
       {/* Service Selection */}
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          <Scissors size={16} />
-          Serviço *
-        </Label>
-        <Select value={serviceId} onValueChange={setServiceId}>
-          <SelectTrigger className="h-12">
-            <SelectValue placeholder="Selecione o serviço..." />
-          </SelectTrigger>
-          <SelectContent>
-            {services.map((service) => (
-              <SelectItem key={service.id} value={service.id}>
-                {service.name} - R$ {service.price.toFixed(2)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {lockService ? (
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <Scissors size={16} />
+            Serviço
+          </Label>
+          <div className="h-12 px-3 rounded-md border bg-muted flex items-center text-sm text-foreground">
+            {selectedService?.name ?? "Consulta Médica"}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Este agendamento será criado como Consulta Médica.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2">
+            <Scissors size={16} />
+            Serviço *
+          </Label>
+          <Select value={serviceId} onValueChange={setServiceId}>
+            <SelectTrigger className="h-12">
+              <SelectValue placeholder="Selecione o serviço..." />
+            </SelectTrigger>
+            <SelectContent>
+              {services.map((service) => (
+                <SelectItem key={service.id} value={service.id}>
+                  {service.name} - R$ {service.price.toFixed(2)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* Professional Selection */}
       <div className="space-y-2">

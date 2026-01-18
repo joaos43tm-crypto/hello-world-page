@@ -24,6 +24,7 @@ type MedicalOffice = {
 type TodayAppointment = {
   id: string;
   pet_id: string;
+  service_id?: string;
   scheduled_time: string;
   status: string | null;
   petName?: string;
@@ -70,6 +71,8 @@ export default function ConsultaMedica() {
 
   const [appointments, setAppointments] = useState<TodayAppointment[]>([]);
   const [appointmentId, setAppointmentId] = useState<string>("");
+  const [medicalServiceIds, setMedicalServiceIds] = useState<string[]>([]);
+  const [medicalServicesLoaded, setMedicalServicesLoaded] = useState(false);
 
   const [current, setCurrent] = useState<Consultation | null>(null);
   const [notesDraft, setNotesDraft] = useState<string>("");
@@ -108,14 +111,41 @@ export default function ConsultaMedica() {
     setOffices((data ?? []) as MedicalOffice[]);
   };
 
-  const loadTodayAppointments = async () => {
+  const loadMedicalServices = async (): Promise<string[]> => {
+    const { data, error } = await supabase
+      .from("services")
+      .select("id,name")
+      .eq("is_active", true)
+      .ilike("name", "%consulta%")
+      .order("name");
+
+    if (error) {
+      console.error("Error loading medical services:", error);
+      setMedicalServicesLoaded(true);
+      setMedicalServiceIds([]);
+      return [];
+    }
+
+    const ids = (data ?? []).map((s: any) => s.id as string);
+    setMedicalServiceIds(ids);
+    setMedicalServicesLoaded(true);
+    return ids;
+  };
+
+  const loadTodayAppointments = async (serviceIds: string[]) => {
     const today = todayISODate();
+
+    if (serviceIds.length === 0) {
+      setAppointments([]);
+      return;
+    }
 
     const { data: appts, error: apptsError } = await supabase
       .from("appointments")
-      .select("id,pet_id,scheduled_time,status")
+      .select("id,pet_id,scheduled_time,status,service_id")
       .eq("scheduled_date", today)
       .eq("status", "agendado")
+      .in("service_id", serviceIds)
       .order("scheduled_time", { ascending: true });
 
     if (apptsError) {
@@ -232,7 +262,8 @@ export default function ConsultaMedica() {
 
     const load = async () => {
       await loadOffices();
-      await loadTodayAppointments();
+      const ids = await loadMedicalServices();
+      await loadTodayAppointments(ids);
       if (mounted) await loadCurrentConsultation();
     };
 
@@ -537,7 +568,7 @@ export default function ConsultaMedica() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Selecionar agendamento (hoje)</CardTitle>
+            <CardTitle>Selecionar consulta agendada (hoje)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -590,7 +621,9 @@ export default function ConsultaMedica() {
             </Button>
 
             <p className="text-xs text-muted-foreground">
-              O histórico do paciente fica no cadastro do Pet/Cliente.
+              {medicalServicesLoaded && medicalServiceIds.length === 0
+                ? "Nenhum serviço de consulta médica encontrado. Cadastre um serviço com nome contendo 'Consulta' em Serviços."
+                : "O histórico do paciente fica no cadastro do Pet/Cliente."}
             </p>
           </CardContent>
         </Card>

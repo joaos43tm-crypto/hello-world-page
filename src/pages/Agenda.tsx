@@ -15,9 +15,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  Stethoscope,
 } from "lucide-react";
 import {
   appointmentsApi,
+  servicesApi,
   type Appointment,
   type AppointmentStatus,
 } from "@/lib/petcontrol.api";
@@ -33,6 +35,8 @@ export default function Agenda() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showNewAppointment, setShowNewAppointment] = useState(false);
+  const [showNewMedicalAppointment, setShowNewMedicalAppointment] = useState(false);
+  const [medicalServiceId, setMedicalServiceId] = useState<string>("");
 
   const loadAppointments = async () => {
     setIsLoading(true);
@@ -49,6 +53,19 @@ export default function Agenda() {
   useEffect(() => {
     loadAppointments();
   }, [selectedDate]);
+
+  useEffect(() => {
+    const loadMedicalService = async () => {
+      try {
+        const services = await servicesApi.getActive();
+        const medical = services.find((s) => /consulta/i.test(s.name));
+        setMedicalServiceId(medical?.id ?? "");
+      } catch (e) {
+        console.error("Error loading services:", e);
+      }
+    };
+    loadMedicalService();
+  }, []);
 
   const handleStatusChange = async (id: string, newStatus: AppointmentStatus) => {
     try {
@@ -112,10 +129,30 @@ export default function Agenda() {
             </h1>
           </div>
           {canCreateAppointment && (
-            <Button onClick={() => setShowNewAppointment(true)} className="gap-2">
-              <Plus size={18} />
-              Agendar
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  if (!medicalServiceId) {
+                    toast({
+                      title: "Serviço de consulta não encontrado",
+                      description: "Cadastre um serviço com nome contendo 'Consulta' em Serviços.",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  setShowNewMedicalAppointment(true);
+                }}
+                className="gap-2"
+              >
+                <Stethoscope size={18} />
+                Agendar Consulta
+              </Button>
+              <Button onClick={() => setShowNewAppointment(true)} className="gap-2">
+                <Plus size={18} />
+                Agendar
+              </Button>
+            </div>
           )}
         </div>
 
@@ -207,10 +244,30 @@ export default function Agenda() {
                 Não há atendimentos marcados para esta data.
               </p>
               {canCreateAppointment && (
-                <Button onClick={() => setShowNewAppointment(true)} className="gap-2">
-                  <Plus size={18} />
-                  Agendar
-                </Button>
+                <div className="flex justify-center gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      if (!medicalServiceId) {
+                        toast({
+                          title: "Serviço de consulta não encontrado",
+                          description: "Cadastre um serviço com nome contendo 'Consulta' em Serviços.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      setShowNewMedicalAppointment(true);
+                    }}
+                    className="gap-2"
+                  >
+                    <Stethoscope size={18} />
+                    Agendar Consulta
+                  </Button>
+                  <Button onClick={() => setShowNewAppointment(true)} className="gap-2">
+                    <Plus size={18} />
+                    Agendar
+                  </Button>
+                </div>
               )}
             </div>
           )}
@@ -218,20 +275,39 @@ export default function Agenda() {
 
         {/* New Appointment Dialog */}
         {canCreateAppointment && (
-          <Dialog open={showNewAppointment} onOpenChange={setShowNewAppointment}>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-primary" />
-                  Novo Agendamento
-                </DialogTitle>
-              </DialogHeader>
-              <AppointmentForm
-                onSave={handleNewAppointment}
-                defaultDate={selectedDate}
-              />
-            </DialogContent>
-          </Dialog>
+          <>
+            <Dialog open={showNewAppointment} onOpenChange={setShowNewAppointment}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-primary" />
+                    Novo Agendamento
+                  </DialogTitle>
+                </DialogHeader>
+                <AppointmentForm onSave={handleNewAppointment} defaultDate={selectedDate} />
+              </DialogContent>
+            </Dialog>
+
+            <Dialog
+              open={showNewMedicalAppointment}
+              onOpenChange={setShowNewMedicalAppointment}
+            >
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Stethoscope className="w-5 h-5 text-primary" />
+                    Nova Consulta Médica
+                  </DialogTitle>
+                </DialogHeader>
+                <AppointmentForm
+                  onSave={handleNewAppointment}
+                  defaultDate={selectedDate}
+                  defaultServiceId={medicalServiceId}
+                  lockService
+                />
+              </DialogContent>
+            </Dialog>
+          </>
         )}
       </div>
     </MainLayout>
