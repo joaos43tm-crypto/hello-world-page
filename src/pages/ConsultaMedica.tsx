@@ -44,6 +44,14 @@ type Consultation = {
   pet_id?: string | null;
 };
 
+type ConsultationFields = {
+  queixa: string;
+  exame: string;
+  diagnostico: string;
+  conduta: string;
+  observacoes: string;
+};
+
 const formatDateTime = (iso: string) =>
   new Date(iso).toLocaleString("pt-BR", {
     day: "2-digit",
@@ -54,6 +62,82 @@ const formatDateTime = (iso: string) =>
   });
 
 const todayISODate = () => isoDateInTimeZone(new Date(), "America/Sao_Paulo");
+
+const emptyFields = (): ConsultationFields => ({
+  queixa: "",
+  exame: "",
+  diagnostico: "",
+  conduta: "",
+  observacoes: "",
+});
+
+function parseStructuredNotes(raw: string | null | undefined): ConsultationFields {
+  const text = (raw ?? "").replace(/\r\n/g, "\n").trim();
+  if (!text) return emptyFields();
+
+  const next = emptyFields();
+  const lines = text.split("\n");
+
+  const headerToKey = (h: string): keyof ConsultationFields | null => {
+    const normalized = h
+      .trim()
+      .toUpperCase()
+      .replace(/:$/, "")
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "");
+
+    if (normalized === "QUEIXA") return "queixa";
+    if (normalized === "EXAME") return "exame";
+    if (normalized === "DIAGNOSTICO") return "diagnostico";
+    if (normalized === "CONDUTA") return "conduta";
+    if (normalized === "OBSERVACOES" || normalized === "OBSERVACAO")
+      return "observacoes";
+    return null;
+  };
+
+  let currentKey: keyof ConsultationFields | null = null;
+  let foundAnyHeader = false;
+
+  for (const line of lines) {
+    const match = line.match(
+      /^\s*(QUEIXA|EXAME|DIAGN[ÓO]STICO|CONDUTA|OBSERVA[CÇ][AÃ]O(?:ES)?):\s*$/i
+    );
+
+    if (match) {
+      currentKey = headerToKey(match[1]);
+      foundAnyHeader = true;
+      continue;
+    }
+
+    if (!currentKey) continue;
+    next[currentKey] += (next[currentKey] ? "\n" : "") + line;
+  }
+
+  // Se não tiver cabeçalhos, joga tudo em observações para não perder conteúdo antigo.
+  if (!foundAnyHeader) {
+    return { ...emptyFields(), observacoes: text };
+  }
+
+  return {
+    queixa: next.queixa.trim(),
+    exame: next.exame.trim(),
+    diagnostico: next.diagnostico.trim(),
+    conduta: next.conduta.trim(),
+    observacoes: next.observacoes.trim(),
+  };
+}
+
+function buildStructuredNotes(fields: ConsultationFields): string {
+  const blocks: Array<{ title: string; content: string }> = [
+    { title: "QUEIXA:", content: fields.queixa.trim() },
+    { title: "EXAME:", content: fields.exame.trim() },
+    { title: "DIAGNÓSTICO:", content: fields.diagnostico.trim() },
+    { title: "CONDUTA:", content: fields.conduta.trim() },
+    { title: "OBSERVAÇÕES:", content: fields.observacoes.trim() },
+  ].filter((b) => b.content.length > 0);
+
+  return blocks.map((b) => `${b.title}\n${b.content}`).join("\n\n");
+}
 
 export default function ConsultaMedica() {
   const { toast } = useToast();
@@ -73,7 +157,10 @@ export default function ConsultaMedica() {
   const [medicalServicesLoaded, setMedicalServicesLoaded] = useState(false);
 
   const [current, setCurrent] = useState<Consultation | null>(null);
-  const [notesDraft, setNotesDraft] = useState<string>("");
+
+  const [fields, setFields] = useState<ConsultationFields>(emptyFields());
+
+  const composedNotes = useMemo(() => buildStructuredNotes(fields), [fields]);
 
   const [contextPetName, setContextPetName] = useState<string>("");
   const [contextTutorName, setContextTutorName] = useState<string>("");
@@ -169,7 +256,10 @@ export default function ConsultaMedica() {
       return;
     }
 
-    const petsById = new Map<string, { id: string; name: string; tutor_id: string }>();
+    const petsById = new Map<
+      string,
+      { id: string; name: string; tutor_id: string }
+    >();
     const tutorIds: string[] = [];
     for (const p of (pets ?? []) as any[]) {
       petsById.set(p.id, p);
@@ -224,7 +314,7 @@ export default function ConsultaMedica() {
 
     const nextCurrent = (currentData?.[0] as Consultation | undefined) ?? null;
     setCurrent(nextCurrent);
-    setNotesDraft(nextCurrent?.notes ?? "");
+    setFields(parseStructuredNotes(nextCurrent?.notes ?? ""));
 
     // Load context (pet/tutor name)
     if (nextCurrent?.pet_id) {
@@ -346,7 +436,7 @@ export default function ConsultaMedica() {
   const handleSaveNotes = async () => {
     if (!current) return;
 
-    const notes = notesDraft.trim();
+    const notes = composedNotes.trim();
     if (notes.length > 5000) {
       toast({
         title: "Anotações muito longas",
@@ -382,7 +472,7 @@ export default function ConsultaMedica() {
   const handleFinalize = async () => {
     if (!current) return;
 
-    const notes = notesDraft.trim();
+    const notes = composedNotes.trim();
     if (notes.length > 5000) {
       toast({
         title: "Anotações muito longas",
@@ -427,19 +517,32 @@ export default function ConsultaMedica() {
 
     setIsGeneratingPdf(true);
     try {
-      const [{ data: settings }, { data: pet, error: petError }] = await Promise.all([
-        supabase.from("store_settings").select("store_name,phone,email,address").limit(1).maybeSingle(),
-        supabase
-          .from("pets")
-          .select("id,name,breed,allergies,tutor:tutors(name,phone,email)")
-          .eq("id", current.pet_id)
-          .maybeSingle(),
-      ]);
+      const [{ data: settings }, { data: pet, error: petError }] =
+        await Promise.all([
+          supabase
+            .from("store_settings")
+            .select("store_name,phone,email,address")
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from("pets")
+            .select("id,name,breed,allergies,tutor:tutors(name,phone,email)")
+            .eq("id", current.pet_id)
+            .maybeSingle(),
+        ]);
 
       if (petError || !pet) throw petError ?? new Error("Pet não encontrado");
 
       const tutor = (pet as any).tutor;
       if (!tutor?.name) throw new Error("Tutor não encontrado");
+
+      const pdfSections = [
+        { title: "Queixa", content: fields.queixa },
+        { title: "Exame", content: fields.exame },
+        { title: "Diagnóstico", content: fields.diagnostico },
+        { title: "Conduta", content: fields.conduta },
+        { title: "Observações", content: fields.observacoes },
+      ].filter((s) => (s.content ?? "").trim().length > 0);
 
       const blob = await generateConsultationPdf({
         store: settings ?? {},
@@ -457,7 +560,8 @@ export default function ConsultaMedica() {
           started_at: current.started_at,
           ended_at: current.ended_at,
           office_name: current.office?.name ?? null,
-          notes: notesDraft,
+          notes: composedNotes,
+          sections: pdfSections,
         },
         professional: {
           name: profile?.name ?? null,
@@ -474,8 +578,12 @@ export default function ConsultaMedica() {
         },
       });
 
-      const safeTutor = String(tutor.name).replace(/[^a-zA-Z0-9-_ ]/g, "").trim();
-      const safePet = String((pet as any).name).replace(/[^a-zA-Z0-9-_ ]/g, "").trim();
+      const safeTutor = String(tutor.name)
+        .replace(/[^a-zA-Z0-9-_ ]/g, "")
+        .trim();
+      const safePet = String((pet as any).name)
+        .replace(/[^a-zA-Z0-9-_ ]/g, "")
+        .trim();
       const filename = `atendimento_${safeTutor || "cliente"}_${safePet || "pet"}.pdf`;
 
       const url = URL.createObjectURL(blob);
@@ -523,28 +631,101 @@ export default function ConsultaMedica() {
             <CardContent className="space-y-4">
               <div className="text-sm text-muted-foreground space-y-1">
                 <p>
-                  <span className="font-medium text-foreground">Cliente:</span> {contextTutorName || "—"}
+                  <span className="font-medium text-foreground">Cliente:</span>{" "}
+                  {contextTutorName || "—"}
                 </p>
                 <p>
-                  <span className="font-medium text-foreground">Pet:</span> {contextPetName || "—"}
+                  <span className="font-medium text-foreground">Pet:</span>{" "}
+                  {contextPetName || "—"}
                 </p>
                 <p>
-                  <span className="font-medium text-foreground">Consultório:</span> {current.office?.name ?? "—"}
+                  <span className="font-medium text-foreground">Consultório:</span>{" "}
+                  {current.office?.name ?? "—"}
                 </p>
                 <p>
-                  <span className="font-medium text-foreground">Início:</span> {formatDateTime(current.started_at)}
+                  <span className="font-medium text-foreground">Início:</span>{" "}
+                  {formatDateTime(current.started_at)}
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Anotações</label>
-                <Textarea
-                  value={notesDraft}
-                  onChange={(e) => setNotesDraft(e.target.value)}
-                  placeholder="Escreva as anotações do atendimento..."
-                  maxLength={5000}
-                />
-                <div className="text-xs text-muted-foreground">{notesDraft.length}/5000</div>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">
+                    Queixa
+                  </label>
+                  <Textarea
+                    value={fields.queixa}
+                    onChange={(e) =>
+                      setFields((prev) => ({ ...prev, queixa: e.target.value }))
+                    }
+                    placeholder="Queixa principal / motivo da consulta..."
+                    maxLength={1200}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Exame</label>
+                  <Textarea
+                    value={fields.exame}
+                    onChange={(e) =>
+                      setFields((prev) => ({ ...prev, exame: e.target.value }))
+                    }
+                    placeholder="Achados do exame físico / observações clínicas..."
+                    maxLength={1200}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">
+                    Diagnóstico
+                  </label>
+                  <Textarea
+                    value={fields.diagnostico}
+                    onChange={(e) =>
+                      setFields((prev) => ({
+                        ...prev,
+                        diagnostico: e.target.value,
+                      }))
+                    }
+                    placeholder="Hipóteses / diagnóstico..."
+                    maxLength={1200}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">
+                    Conduta
+                  </label>
+                  <Textarea
+                    value={fields.conduta}
+                    onChange={(e) =>
+                      setFields((prev) => ({ ...prev, conduta: e.target.value }))
+                    }
+                    placeholder="Tratamento / conduta / prescrição..."
+                    maxLength={1200}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">
+                    Observações
+                  </label>
+                  <Textarea
+                    value={fields.observacoes}
+                    onChange={(e) =>
+                      setFields((prev) => ({
+                        ...prev,
+                        observacoes: e.target.value,
+                      }))
+                    }
+                    placeholder="Outras anotações..."
+                    maxLength={1200}
+                  />
+                </div>
+
+                <div className="text-xs text-muted-foreground">
+                  {composedNotes.length}/5000
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -590,13 +771,20 @@ export default function ConsultaMedica() {
                 className="w-fit"
               />
               <p className="text-xs text-muted-foreground">
-                Mostrando consultas com status <span className="font-medium">agendado</span>.
+                Mostrando consultas com status{" "}
+                <span className="font-medium">agendado</span>.
               </p>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Cliente / Pet</label>
-              <Select value={appointmentId} onValueChange={setAppointmentId} disabled={!!current}>
+              <label className="text-sm font-medium text-foreground">
+                Cliente / Pet
+              </label>
+              <Select
+                value={appointmentId}
+                onValueChange={setAppointmentId}
+                disabled={!!current}
+              >
                 <SelectTrigger>
                   <SelectValue
                     placeholder={
@@ -609,7 +797,8 @@ export default function ConsultaMedica() {
                 <SelectContent>
                   {appointments.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
-                      {a.scheduled_time?.slice(0, 5)} — {a.tutorName ?? "Cliente"} / {a.petName ?? "Pet"}
+                      {a.scheduled_time?.slice(0, 5)} — {a.tutorName ?? "Cliente"} /{" "}
+                      {a.petName ?? "Pet"}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -617,8 +806,14 @@ export default function ConsultaMedica() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Consultório</label>
-              <Select value={officeId} onValueChange={setOfficeId} disabled={!!current}>
+              <label className="text-sm font-medium text-foreground">
+                Consultório
+              </label>
+              <Select
+                value={officeId}
+                onValueChange={setOfficeId}
+                disabled={!!current}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um consultório" />
                 </SelectTrigger>
