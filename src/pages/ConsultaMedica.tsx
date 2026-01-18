@@ -469,7 +469,8 @@ export default function ConsultaMedica() {
                 : null,
         },
         options: {
-          includeCoverPage: true,
+          // 1 página apenas: sem capa
+          includeCoverPage: false,
         },
       });
 

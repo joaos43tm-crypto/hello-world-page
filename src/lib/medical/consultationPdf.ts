@@ -86,18 +86,31 @@ export async function generateConsultationPdf(input: ConsultationPdfInput) {
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   const pageSize: [number, number] = [595.28, 841.89]; // A4
-  const marginX = 48;
+  const marginX = 42;
+  const bottomMargin = 56;
   let page = pdfDoc.addPage(pageSize);
-  let y = 800;
-  const lineH = 14;
+  let y = 806;
+
+  // Compact layout to fit in a single page
+  const baseFontSize = 10;
+  const baseLineH = 12;
 
   const storeName = input.store.store_name?.trim() || "Nome do PetShop";
 
-  const drawText = (text: string, opts?: { bold?: boolean; size?: number; x?: number }) => {
-    const size = opts?.size ?? 12;
+  const drawText = (
+    text: string,
+    opts?: { bold?: boolean; size?: number; x?: number; color?: ReturnType<typeof rgb> }
+  ) => {
+    const size = opts?.size ?? baseFontSize;
     const chosenFont = opts?.bold ? fontBold : font;
-    page.drawText(text, { x: opts?.x ?? marginX, y, size, font: chosenFont });
-    y -= lineH + (size - 12) * 0.2;
+    page.drawText(text, {
+      x: opts?.x ?? marginX,
+      y,
+      size,
+      font: chosenFont,
+      color: opts?.color,
+    });
+    y -= baseLineH + (size - baseFontSize) * 0.25;
   };
 
   const newPage = (title?: string) => {
@@ -109,7 +122,8 @@ export async function generateConsultationPdf(input: ConsultationPdfInput) {
     }
   };
 
-  const includeCoverPage = input.options?.includeCoverPage !== false;
+  // Default: single page PDF (no cover). Cover only when explicitly enabled.
+  const includeCoverPage = input.options?.includeCoverPage === true;
 
   if (includeCoverPage) {
     // --- Cover page (modelo semelhante à imagem)
@@ -206,46 +220,59 @@ export async function generateConsultationPdf(input: ConsultationPdfInput) {
   }
 
   // --- Report content
-  y = 800;
+  y = 806;
 
   // Header
-  drawText(storeName, { bold: true, size: 16 });
+  drawText(storeName, { bold: true, size: 14, color: rgb(0.05, 0.18, 0.32) });
 
   const contactBits = [input.store.phone, input.store.email].filter(Boolean).join(" • ");
-  if (contactBits) drawText(contactBits);
-  if (input.store.address) drawText(input.store.address);
-
-  y -= 8;
-  drawText("RELATÓRIO DE ATENDIMENTO", { bold: true, size: 14 });
-  y -= 4;
-
-  // Patient
-  drawText(`Cliente: ${input.tutor.name}`, { bold: true });
-  const tutorContact = [input.tutor.phone, input.tutor.email].filter(Boolean).join(" • ");
-  if (tutorContact) drawText(`Contato: ${tutorContact}`);
-
-  drawText(`Pet: ${input.pet.name}`, { bold: true });
-  if (input.pet.breed) drawText(`Raça: ${input.pet.breed}`);
-  if (input.pet.allergies) drawText(`Alergias: ${input.pet.allergies}`);
+  if (contactBits) drawText(contactBits, { size: 9 });
+  if (input.store.address) drawText(input.store.address, { size: 9 });
 
   y -= 6;
+  drawText("RELATÓRIO DE ATENDIMENTO", { bold: true, size: 12 });
+  y -= 2;
+
+  // Patient
+  drawText(`Cliente: ${input.tutor.name}`, { bold: true, size: 10 });
+  const tutorContact = [input.tutor.phone, input.tutor.email].filter(Boolean).join(" • ");
+  if (tutorContact) drawText(`Contato: ${tutorContact}`, { size: 9 });
+
+  drawText(`Pet: ${input.pet.name}`, { bold: true, size: 10 });
+  if (input.pet.breed) drawText(`Raça: ${input.pet.breed}`, { size: 9 });
+  if (input.pet.allergies) drawText(`Alergias: ${input.pet.allergies}`, { size: 9 });
+
+  y -= 4;
 
   // Consultation metadata
-  if (input.consultation.office_name) drawText(`Consultório: ${input.consultation.office_name}`);
-  drawText(`Início: ${formatDateTime(input.consultation.started_at)}`);
+  if (input.consultation.office_name)
+    drawText(`Consultório: ${input.consultation.office_name}`, { size: 9 });
+  drawText(`Início: ${formatDateTime(input.consultation.started_at)}`, { size: 9 });
   if (input.consultation.ended_at) {
-    drawText(`Fim: ${formatDateTime(input.consultation.ended_at)}`);
+    drawText(`Fim: ${formatDateTime(input.consultation.ended_at)}`, { size: 9 });
   }
 
-  y -= 8;
-  drawText("Anotações", { bold: true });
+  y -= 6;
+  drawText("Anotações", { bold: true, size: 11 });
 
   const notes = (input.consultation.notes ?? "").trim();
-  const notesLines = notes ? wrapText(notes, 95) : ["(sem anotações)"]; // heuristic for Helvetica 12
+  const rawLines = notes ? wrapText(notes, 115) : ["(sem anotações)"];
 
-  for (const line of notesLines) {
-    if (y < 60) newPage("Anotações (continuação)");
-    drawText(line);
+  // We must keep the PDF to 1 page: truncate if needed.
+  const availableLines = Math.max(1, Math.floor((y - bottomMargin) / baseLineH));
+
+  let linesToRender = rawLines;
+  if (rawLines.length > availableLines) {
+    const cut = Math.max(1, availableLines - 1);
+    linesToRender = [
+      ...rawLines.slice(0, cut),
+      "(conteúdo excedente omitido para caber em 1 página)",
+    ];
+  }
+
+  for (const line of linesToRender) {
+    if (y <= bottomMargin) break;
+    drawText(line, { size: baseFontSize });
   }
 
   const pdfBytes = await pdfDoc.save();
