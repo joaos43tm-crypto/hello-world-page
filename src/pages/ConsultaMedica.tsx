@@ -13,7 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Stethoscope } from "lucide-react";
+import { generateConsultationPdf } from "@/lib/medical/consultationPdf";
+import { FileDown, Stethoscope } from "lucide-react";
 
 type MedicalOffice = {
   id: string;
@@ -79,6 +80,7 @@ export default function ConsultaMedica() {
   const [isStarting, setIsStarting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const selectedOffice = useMemo(
     () => offices.find((o) => o.id === officeId) ?? null,
@@ -386,6 +388,78 @@ export default function ConsultaMedica() {
     }
   };
 
+  const handleGeneratePdf = async () => {
+    if (!current || !current.pet_id) {
+      toast({
+        title: "Sem atendimento ativo",
+        description: "Inicie um atendimento para gerar o PDF.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingPdf(true);
+    try {
+      const [{ data: settings }, { data: pet, error: petError }] = await Promise.all([
+        supabase.from("store_settings").select("store_name,phone,email,address").limit(1).maybeSingle(),
+        supabase
+          .from("pets")
+          .select("id,name,breed,allergies,tutor:tutors(name,phone,email)")
+          .eq("id", current.pet_id)
+          .maybeSingle(),
+      ]);
+
+      if (petError || !pet) throw petError ?? new Error("Pet não encontrado");
+
+      const tutor = (pet as any).tutor;
+      if (!tutor?.name) throw new Error("Tutor não encontrado");
+
+      const blob = await generateConsultationPdf({
+        store: settings ?? {},
+        tutor: {
+          name: tutor.name,
+          phone: tutor.phone,
+          email: tutor.email,
+        },
+        pet: {
+          name: (pet as any).name,
+          breed: (pet as any).breed,
+          allergies: (pet as any).allergies,
+        },
+        consultation: {
+          started_at: current.started_at,
+          ended_at: current.ended_at,
+          office_name: current.office?.name ?? null,
+          notes: notesDraft,
+        },
+      });
+
+      const safeTutor = String(tutor.name).replace(/[^a-zA-Z0-9-_ ]/g, "").trim();
+      const safePet = String((pet as any).name).replace(/[^a-zA-Z0-9-_ ]/g, "").trim();
+      const filename = `atendimento_${safeTutor || "cliente"}_${safePet || "pet"}.pdf`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      toast({ title: "PDF gerado" });
+    } catch (e) {
+      console.error("Error generating PDF:", e);
+      toast({
+        title: "Erro ao gerar PDF",
+        description: e instanceof Error ? e.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
   return (
     <MainLayout>
       <div className="p-4 md:p-6 space-y-6">
@@ -437,11 +511,23 @@ export default function ConsultaMedica() {
                 <Button
                   variant="secondary"
                   onClick={handleSaveNotes}
-                  disabled={isSaving || isFinalizing}
+                  disabled={isSaving || isFinalizing || isGeneratingPdf}
                 >
                   {isSaving ? "Salvando..." : "Salvar anotações"}
                 </Button>
-                <Button onClick={handleFinalize} disabled={isSaving || isFinalizing}>
+                <Button
+                  variant="outline"
+                  onClick={handleGeneratePdf}
+                  disabled={isSaving || isFinalizing || isGeneratingPdf}
+                  className="gap-2"
+                >
+                  <FileDown className="w-4 h-4" />
+                  {isGeneratingPdf ? "Gerando PDF..." : "Gerar PDF"}
+                </Button>
+                <Button
+                  onClick={handleFinalize}
+                  disabled={isSaving || isFinalizing || isGeneratingPdf}
+                >
                   {isFinalizing ? "Finalizando..." : "Finalizar atendimento"}
                 </Button>
               </div>
