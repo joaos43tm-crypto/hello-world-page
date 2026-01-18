@@ -1,112 +1,112 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+type Action = "list" | "create" | "delete";
+
+function json(resBody: unknown, status = 200) {
+  return new Response(JSON.stringify(resBody), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const adminPassword = Deno.env.get('ADMIN_PASSWORD')!
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) return json({ error: "Não autenticado" }, 401);
 
-    const { action, password, code, cnpj, company_name } = await req.json()
+    // Client with end-user JWT, used only to validate the token.
+    const supabaseAuthed = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
 
-    // Validate admin password
-    if (password !== adminPassword) {
-      return new Response(
-        JSON.stringify({ error: 'Senha inválida' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    const { data: userData, error: userError } = await supabaseAuthed.auth.getUser();
+    if (userError || !userData?.user) return json({ error: "Token inválido" }, 401);
+
+    // Admin client for privileged DB ops
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    const caller = userData.user;
+    const { data: isAdmin, error: adminCheckError } = await supabaseAdmin.rpc("is_admin", {
+      _user_id: caller.id,
+    });
+
+    if (adminCheckError) throw adminCheckError;
+    if (!isAdmin) return json({ error: "Acesso negado" }, 403);
+
+    const body = await req.json().catch(() => ({}));
+    const action = body?.action as Action | undefined;
+
+    if (!action) return json({ error: "Ação inválida" }, 400);
+
+    if (action === "list") {
+      const { data, error } = await supabaseAdmin
+        .from("registration_codes")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return json({ codes: data });
     }
 
-    if (action === 'list') {
-      const { data, error } = await supabase
-        .from('registration_codes')
-        .select('*')
-        .order('created_at', { ascending: false })
+    if (action === "create") {
+      const code = typeof body?.code === "string" ? body.code.trim() : "";
+      const cnpj = typeof body?.cnpj === "string" ? body.cnpj.trim() : "";
+      const companyName = typeof body?.company_name === "string" ? body.company_name.trim() : "";
 
-      if (error) throw error
-
-      return new Response(
-        JSON.stringify({ codes: data }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    if (action === 'create') {
-      if (!code || !cnpj || !company_name) {
-        return new Response(
-          JSON.stringify({ error: 'Código, CNPJ e Razão Social são obrigatórios' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+      if (!code || !cnpj || !companyName) {
+        return json({ error: "Código, CNPJ e Razão Social são obrigatórios" }, 400);
       }
 
-      const { data, error } = await supabase
-        .from('registration_codes')
+      const upper = code.toUpperCase().slice(0, 32);
+
+      const { data, error } = await supabaseAdmin
+        .from("registration_codes")
         .insert({
-          code: code.toUpperCase(),
+          code: upper,
           cnpj,
-          company_name,
+          company_name: companyName,
+          created_by: caller.id,
         })
         .select()
-        .single()
+        .single();
 
       if (error) {
-        if (error.code === '23505') {
-          return new Response(
-            JSON.stringify({ error: 'Este código já existe' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
+        if ((error as any).code === "23505") {
+          return json({ error: "Este código já existe" }, 400);
         }
-        throw error
+        throw error;
       }
 
-      return new Response(
-        JSON.stringify({ code: data }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return json({ code: data });
     }
 
-    if (action === 'delete') {
-      if (!code) {
-        return new Response(
-          JSON.stringify({ error: 'Código é obrigatório' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
+    if (action === "delete") {
+      const id = typeof body?.code === "string" ? body.code.trim() : "";
+      if (!id) return json({ error: "Código é obrigatório" }, 400);
 
-      const { error } = await supabase
-        .from('registration_codes')
-        .delete()
-        .eq('id', code)
+      const { error } = await supabaseAdmin.from("registration_codes").delete().eq("id", id);
+      if (error) throw error;
 
-      if (error) throw error
-
-      return new Response(
-        JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return json({ success: true });
     }
 
-    return new Response(
-      JSON.stringify({ error: 'Ação inválida' }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
-
+    return json({ error: "Ação inválida" }, 400);
   } catch (error: unknown) {
-    console.error('Error:', error)
-    const message = error instanceof Error ? error.message : 'Erro desconhecido'
-    return new Response(
-      JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    console.error("admin-codes error:", error);
+    const message = error instanceof Error ? error.message : "Erro desconhecido";
+    return json({ error: message }, 500);
   }
-})
+});
