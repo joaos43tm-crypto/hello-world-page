@@ -1,6 +1,19 @@
 import { supabase } from "@/integrations/supabase/client";
 
 // ============================================
+// SECURITY HELPERS
+// ============================================
+
+const MAX_SEARCH_LEN = 80;
+
+function sanitizeIlikeQuery(raw: string) {
+  // Prevent pattern injection / wildcard abuse in ILIKE queries
+  const trimmed = (raw ?? "").trim().slice(0, MAX_SEARCH_LEN);
+  // Escape %, _ and backslash which have special meaning in LIKE/ILIKE patterns
+  return trimmed.replace(/[%_\\]/g, "\\$&");
+}
+
+// ============================================
 // TYPES
 // ============================================
 
@@ -201,11 +214,16 @@ export const tutorsApi = {
   },
 
   async search(query: string): Promise<Tutor[]> {
+    const q = sanitizeIlikeQuery(query);
+    if (!q) return this.getAll();
+
     const { data, error } = await supabase
-      .from('tutors')
-      .select('*')
-      .or(`name.ilike.%${query}%,phone.ilike.%${query}%`)
-      .order('name');
+      .from("tutors")
+      .select("*")
+      // Note: Supabase `or()` expects a PostgREST filter string
+      .or(`name.ilike.%${q}%,phone.ilike.%${q}%`)
+      .order("name");
+
     if (error) throw error;
     return data || [];
   },
@@ -292,11 +310,15 @@ export const petsApi = {
   },
 
   async search(query: string): Promise<Pet[]> {
+    const q = sanitizeIlikeQuery(query);
+    if (!q) return this.getAll();
+
     const { data, error } = await supabase
-      .from('pets')
-      .select('*, tutor:tutors(*)')
-      .or(`name.ilike.%${query}%,breed.ilike.%${query}%`)
-      .order('name');
+      .from("pets")
+      .select("*, tutor:tutors(*)")
+      .or(`name.ilike.%${q}%,breed.ilike.%${q}%`)
+      .order("name");
+
     if (error) throw error;
     return data || [];
   },
