@@ -83,7 +83,7 @@ const weekDays = [
 
 export default function Configuracoes() {
   const { toast } = useToast();
-  const { profile, role, isAdmin, signOut } = useAuth();
+  const { profile, role, isAdmin, signOut, refreshUserData } = useAuth();
   const [activeTab, setActiveTab] = useState<"store" | "hours" | "printer" | "features" | "users">("store");
   const [settings, setSettings] = useState<StoreSettings | null>(null);
   const [users, setUsers] = useState<UserWithRole[]>([]);
@@ -118,6 +118,9 @@ export default function Configuracoes() {
   const [printerAddress, setPrinterAddress] = useState("");
   const [plansEnabled, setPlansEnabled] = useState(false);
 
+  // Médico: CRMV (salvo no cadastro do usuário)
+  const [crmv, setCrmv] = useState("");
+  const [isSavingCrmv, setIsSavingCrmv] = useState(false);
   const loadUsers = async () => {
     if (!isAdmin || !profile?.cnpj) return;
 
@@ -191,6 +194,10 @@ export default function Configuracoes() {
     loadSettings();
   }, [isAdmin, profile?.cnpj]);
 
+  useEffect(() => {
+    setCrmv((profile as any)?.crmv ?? "");
+  }, [profile?.id]);
+
   const handleSave = async () => {
     if (!settings?.id || !isAdmin) return;
 
@@ -226,7 +233,10 @@ export default function Configuracoes() {
     }
   };
 
-  const handleRoleChange = async (userId: string, newRole: "admin" | "atendente" | "tosador" | "medico") => {
+  const handleRoleChange = async (
+    userId: string,
+    newRole: "admin" | "atendente" | "tosador" | "medico"
+  ) => {
     try {
       const { error } = await supabase
         .from("user_roles")
@@ -240,6 +250,42 @@ export default function Configuracoes() {
     } catch (error) {
       console.error("Error updating role:", error);
       toast({ title: "Erro ao atualizar", variant: "destructive" });
+    }
+  };
+
+  const handleSaveCrmv = async () => {
+    if (!profile?.user_id) return;
+
+    const value = crmv.trim();
+    if (value.length > 60) {
+      toast({
+        title: "CRMV inválido",
+        description: "Use até 60 caracteres.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingCrmv(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ crmv: value || null })
+        .eq("user_id", profile.user_id);
+
+      if (error) throw error;
+
+      await refreshUserData();
+      toast({ title: "CRMV salvo no cadastro" });
+    } catch (e) {
+      console.error("Error saving CRMV:", e);
+      toast({
+        title: "Erro ao salvar CRMV",
+        description: e instanceof Error ? e.message : "Erro desconhecido",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingCrmv(false);
     }
   };
 
@@ -664,18 +710,50 @@ export default function Configuracoes() {
                   Recursos do Sistema
                 </h2>
 
-                <div className="flex items-center justify-between p-4 bg-muted rounded-xl">
-                  <div>
-                    <p className="font-medium text-foreground">Planos para Clientes</p>
-                    <p className="text-sm text-muted-foreground">
-                      Permite associar planos mensais aos clientes com controle de vencimento e pagamento
-                    </p>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-muted rounded-xl">
+                    <div>
+                      <p className="font-medium text-foreground">Planos para Clientes</p>
+                      <p className="text-sm text-muted-foreground">
+                        Permite associar planos mensais aos clientes com controle de vencimento e pagamento
+                      </p>
+                    </div>
+                    <Switch
+                      checked={plansEnabled}
+                      onCheckedChange={setPlansEnabled}
+                      disabled={!isAdmin}
+                    />
                   </div>
-                  <Switch
-                    checked={plansEnabled}
-                    onCheckedChange={setPlansEnabled}
-                    disabled={!isAdmin}
-                  />
+
+                  {role === "medico" && (
+                    <div className="p-4 bg-muted rounded-xl space-y-3">
+                      <div>
+                        <p className="font-medium text-foreground">Assinatura do PDF</p>
+                        <p className="text-sm text-muted-foreground">
+                          Configure seu CRMV para preencher automaticamente nas consultas (você pode editar ao gerar o PDF).
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>CRMV</Label>
+                        <Input
+                          value={crmv}
+                          onChange={(e) => setCrmv(e.target.value)}
+                          placeholder="Ex: CRMV-SP 12345"
+                          className="h-12"
+                        />
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        onClick={handleSaveCrmv}
+                        disabled={isSavingCrmv}
+                        className="w-fit"
+                      >
+                        {isSavingCrmv ? "Salvando..." : "Salvar CRMV"}
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 {isAdmin && (

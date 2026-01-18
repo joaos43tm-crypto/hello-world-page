@@ -12,6 +12,7 @@ interface Profile {
   avatar_url?: string;
   cnpj?: string;
   company_name?: string;
+  crmv?: string;
 }
 
 interface AuthContextType {
@@ -22,8 +23,14 @@ interface AuthContextType {
   isAdmin: boolean;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, companyName: string, cnpj: string) => Promise<{ error: Error | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    companyName: string,
+    cnpj: string
+  ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  refreshUserData: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -135,6 +142,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = role === "admin";
 
+  const refreshUserData = async () => {
+    if (!user?.id) return;
+    await fetchUserData(user.id);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -147,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signUp,
         signOut,
+        refreshUserData,
       }}
     >
       {children}

@@ -414,6 +414,7 @@ export type Database = {
           cnpj: string | null
           company_name: string | null
           created_at: string | null
+          crmv: string | null
           id: string
           name: string
           phone: string | null
@@ -425,6 +426,7 @@ export type Database = {
           cnpj?: string | null
           company_name?: string | null
           created_at?: string | null
+          crmv?: string | null
           id?: string
           name: string
           phone?: string | null
@@ -436,6 +438,7 @@ export type Database = {
           cnpj?: string | null
           company_name?: string | null
           created_at?: string | null
+          crmv?: string | null
           id?: string
           name?: string
           phone?: string | null
