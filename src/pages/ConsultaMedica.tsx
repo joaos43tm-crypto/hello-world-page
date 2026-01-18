@@ -20,6 +20,15 @@ type MedicalOffice = {
   name: string;
 };
 
+type TodayAppointment = {
+  id: string;
+  pet_id: string;
+  scheduled_time: string;
+  status: string | null;
+  petName?: string;
+  tutorName?: string;
+};
+
 type Consultation = {
   id: string;
   started_at: string;
@@ -27,6 +36,8 @@ type Consultation = {
   notes: string | null;
   office_id: string;
   office?: { name: string } | null;
+  appointment_id?: string | null;
+  pet_id?: string | null;
 };
 
 const formatDateTime = (iso: string) =>
@@ -38,21 +49,32 @@ const formatDateTime = (iso: string) =>
     minute: "2-digit",
   });
 
+const todayISODate = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 export default function ConsultaMedica() {
   const { toast } = useToast();
   const { user } = useAuth();
 
   // Our generated DB types may lag behind newly created tables.
-  // Use a narrow escape hatch for the new medical_* tables.
   const db = supabase as any;
 
   const [offices, setOffices] = useState<MedicalOffice[]>([]);
   const [officeId, setOfficeId] = useState<string>("");
 
-  const [current, setCurrent] = useState<Consultation | null>(null);
-  const [history, setHistory] = useState<Consultation[]>([]);
+  const [appointments, setAppointments] = useState<TodayAppointment[]>([]);
+  const [appointmentId, setAppointmentId] = useState<string>("");
 
+  const [current, setCurrent] = useState<Consultation | null>(null);
   const [notesDraft, setNotesDraft] = useState<string>("");
+
+  const [contextPetName, setContextPetName] = useState<string>("");
+  const [contextTutorName, setContextTutorName] = useState<string>("");
 
   const [isStarting, setIsStarting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -61,6 +83,11 @@ export default function ConsultaMedica() {
   const selectedOffice = useMemo(
     () => offices.find((o) => o.id === officeId) ?? null,
     [offices, officeId]
+  );
+
+  const selectedAppointment = useMemo(
+    () => appointments.find((a) => a.id === appointmentId) ?? null,
+    [appointments, appointmentId]
   );
 
   const loadOffices = async () => {
@@ -79,12 +106,83 @@ export default function ConsultaMedica() {
     setOffices((data ?? []) as MedicalOffice[]);
   };
 
-  const loadConsultations = async () => {
+  const loadTodayAppointments = async () => {
+    const today = todayISODate();
+
+    const { data: appts, error: apptsError } = await supabase
+      .from("appointments")
+      .select("id,pet_id,scheduled_time,status")
+      .eq("scheduled_date", today)
+      .eq("status", "agendado")
+      .order("scheduled_time", { ascending: true });
+
+    if (apptsError) {
+      console.error("Error loading today appointments:", apptsError);
+      toast({ title: "Erro ao carregar agendamentos", variant: "destructive" });
+      return;
+    }
+
+    const base = (appts ?? []) as TodayAppointment[];
+    const petIds = Array.from(new Set(base.map((a) => a.pet_id).filter(Boolean)));
+
+    if (petIds.length === 0) {
+      setAppointments([]);
+      return;
+    }
+
+    const { data: pets, error: petsError } = await supabase
+      .from("pets")
+      .select("id,name,tutor_id")
+      .in("id", petIds);
+
+    if (petsError) {
+      console.error("Error loading pets for appointments:", petsError);
+      setAppointments(base);
+      return;
+    }
+
+    const petsById = new Map<string, { id: string; name: string; tutor_id: string }>();
+    const tutorIds: string[] = [];
+    for (const p of (pets ?? []) as any[]) {
+      petsById.set(p.id, p);
+      if (p.tutor_id) tutorIds.push(p.tutor_id);
+    }
+
+    const uniqueTutorIds = Array.from(new Set(tutorIds));
+    let tutorsById = new Map<string, { id: string; name: string }>();
+
+    if (uniqueTutorIds.length > 0) {
+      const { data: tutors, error: tutorsError } = await supabase
+        .from("tutors")
+        .select("id,name")
+        .in("id", uniqueTutorIds);
+
+      if (!tutorsError) {
+        tutorsById = new Map((tutors ?? []).map((t: any) => [t.id, t]));
+      }
+    }
+
+    const enriched = base.map((a) => {
+      const pet = petsById.get(a.pet_id);
+      const tutor = pet?.tutor_id ? tutorsById.get(pet.tutor_id) : undefined;
+      return {
+        ...a,
+        petName: pet?.name,
+        tutorName: tutor?.name,
+      };
+    });
+
+    setAppointments(enriched);
+  };
+
+  const loadCurrentConsultation = async () => {
     if (!user) return;
 
     const { data: currentData, error: currentError } = await db
       .from("medical_consultations")
-      .select("id,started_at,ended_at,notes,office_id,office:medical_offices(name)")
+      .select(
+        "id,started_at,ended_at,notes,office_id,office:medical_offices(name),appointment_id,pet_id"
+      )
       .eq("created_by", user.id)
       .is("ended_at", null)
       .order("started_at", { ascending: false })
@@ -100,20 +198,31 @@ export default function ConsultaMedica() {
     setCurrent(nextCurrent);
     setNotesDraft(nextCurrent?.notes ?? "");
 
-    const { data: historyData, error: historyError } = await db
-      .from("medical_consultations")
-      .select("id,started_at,ended_at,notes,office_id,office:medical_offices(name)")
-      .eq("created_by", user.id)
-      .order("started_at", { ascending: false })
-      .limit(20);
+    // Load context (pet/tutor name)
+    if (nextCurrent?.pet_id) {
+      const { data: pet, error: petError } = await supabase
+        .from("pets")
+        .select("id,name,tutor_id")
+        .eq("id", nextCurrent.pet_id)
+        .maybeSingle();
 
-    if (historyError) {
-      console.error("Error loading consultations history:", historyError);
-      toast({ title: "Erro ao carregar histórico", variant: "destructive" });
-      return;
+      if (!petError && pet) {
+        setContextPetName((pet as any).name ?? "");
+
+        const tutorId = (pet as any).tutor_id;
+        if (tutorId) {
+          const { data: tutor } = await supabase
+            .from("tutors")
+            .select("id,name")
+            .eq("id", tutorId)
+            .maybeSingle();
+          setContextTutorName((tutor as any)?.name ?? "");
+        }
+      }
+    } else {
+      setContextPetName("");
+      setContextTutorName("");
     }
-
-    setHistory((historyData ?? []) as Consultation[]);
   };
 
   useEffect(() => {
@@ -121,7 +230,8 @@ export default function ConsultaMedica() {
 
     const load = async () => {
       await loadOffices();
-      if (mounted) await loadConsultations();
+      await loadTodayAppointments();
+      if (mounted) await loadCurrentConsultation();
     };
 
     load();
@@ -132,6 +242,16 @@ export default function ConsultaMedica() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!selectedAppointment) {
+      setContextPetName("");
+      setContextTutorName("");
+      return;
+    }
+    setContextPetName(selectedAppointment.petName ?? "");
+    setContextTutorName(selectedAppointment.tutorName ?? "");
+  }, [selectedAppointment]);
+
   const handleStart = async () => {
     if (!user) return;
 
@@ -139,6 +259,15 @@ export default function ConsultaMedica() {
       toast({
         title: "Já existe um atendimento em andamento",
         description: "Finalize o atendimento atual para iniciar outro.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!appointmentId || !selectedAppointment) {
+      toast({
+        title: "Selecione um agendamento",
+        description: "Escolha o cliente/pet agendado para hoje.",
         variant: "destructive",
       });
       return;
@@ -158,6 +287,8 @@ export default function ConsultaMedica() {
       const { error } = await db.from("medical_consultations").insert({
         office_id: officeId,
         created_by: user.id,
+        appointment_id: selectedAppointment.id,
+        pet_id: selectedAppointment.pet_id,
         notes: "",
       });
 
@@ -170,7 +301,7 @@ export default function ConsultaMedica() {
           : "Atendimento iniciado com sucesso.",
       });
 
-      await loadConsultations();
+      await loadCurrentConsultation();
     } catch (e) {
       console.error("Error starting consultation:", e);
       toast({
@@ -206,7 +337,7 @@ export default function ConsultaMedica() {
       if (error) throw error;
 
       toast({ title: "Anotações salvas" });
-      await loadConsultations();
+      await loadCurrentConsultation();
     } catch (e) {
       console.error("Error saving notes:", e);
       toast({
@@ -242,7 +373,7 @@ export default function ConsultaMedica() {
       if (error) throw error;
 
       toast({ title: "Atendimento finalizado" });
-      await loadConsultations();
+      await loadCurrentConsultation();
     } catch (e) {
       console.error("Error finalizing consultation:", e);
       toast({
@@ -265,7 +396,7 @@ export default function ConsultaMedica() {
               Consulta Médica
             </h1>
             <p className="text-muted-foreground mt-1">
-              Inicie um atendimento, registre as anotações e finalize ao término.
+              Selecione o cliente/pet agendado para hoje e inicie o atendimento.
             </p>
           </div>
         </header>
@@ -276,14 +407,18 @@ export default function ConsultaMedica() {
               <CardTitle>Atendimento em andamento</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="text-sm text-muted-foreground">
+              <div className="text-sm text-muted-foreground space-y-1">
                 <p>
-                  <span className="font-medium text-foreground">Consultório:</span>{" "}
-                  {current.office?.name ?? "—"}
+                  <span className="font-medium text-foreground">Cliente:</span> {contextTutorName || "—"}
                 </p>
                 <p>
-                  <span className="font-medium text-foreground">Início:</span>{" "}
-                  {formatDateTime(current.started_at)}
+                  <span className="font-medium text-foreground">Pet:</span> {contextPetName || "—"}
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">Consultório:</span> {current.office?.name ?? "—"}
+                </p>
+                <p>
+                  <span className="font-medium text-foreground">Início:</span> {formatDateTime(current.started_at)}
                 </p>
               </div>
 
@@ -295,9 +430,7 @@ export default function ConsultaMedica() {
                   placeholder="Escreva as anotações do atendimento..."
                   maxLength={5000}
                 />
-                <div className="text-xs text-muted-foreground">
-                  {notesDraft.length}/5000
-                </div>
+                <div className="text-xs text-muted-foreground">{notesDraft.length}/5000</div>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -318,12 +451,34 @@ export default function ConsultaMedica() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Iniciar atendimento</CardTitle>
+            <CardTitle>Selecionar agendamento (hoje)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Cliente / Pet</label>
+              <Select value={appointmentId} onValueChange={setAppointmentId} disabled={!!current}>
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      appointments.length === 0
+                        ? "Nenhum agendamento para hoje"
+                        : "Selecione um agendamento"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {appointments.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.scheduled_time?.slice(0, 5)} — {a.tutorName ?? "Cliente"} / {a.petName ?? "Pet"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Consultório</label>
-              <Select value={officeId} onValueChange={setOfficeId}>
+              <Select value={officeId} onValueChange={setOfficeId} disabled={!!current}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um consultório" />
                 </SelectTrigger>
@@ -337,55 +492,20 @@ export default function ConsultaMedica() {
               </Select>
             </div>
 
-            <Button onClick={handleStart} disabled={isStarting || !user || !!current}>
+            <Button
+              onClick={handleStart}
+              disabled={isStarting || !user || !!current || appointments.length === 0}
+            >
               {current
                 ? "Finalize o atendimento atual"
                 : isStarting
                   ? "Iniciando..."
                   : "Iniciar Atendimento"}
             </Button>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Histórico</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {history.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nenhuma consulta registrada ainda.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {history.map((c) => (
-                  <div
-                    key={c.id}
-                    className="p-4 rounded-xl bg-muted/50 border border-border"
-                  >
-                    <p className="font-medium text-foreground">
-                      {c.office?.name ?? "Consultório"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Início: {formatDateTime(c.started_at)}
-                      {c.ended_at
-                        ? ` • Fim: ${formatDateTime(c.ended_at)}`
-                        : " • Em andamento"}
-                    </p>
-
-                    {c.notes ? (
-                      <p className="text-sm text-foreground mt-3 whitespace-pre-wrap">
-                        {c.notes}
-                      </p>
-                    ) : (
-                      <p className="text-sm text-muted-foreground mt-3">
-                        Sem anotações.
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+            <p className="text-xs text-muted-foreground">
+              O histórico do paciente fica no cadastro do Pet/Cliente.
+            </p>
           </CardContent>
         </Card>
       </div>
