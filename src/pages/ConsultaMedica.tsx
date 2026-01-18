@@ -49,6 +49,7 @@ type ConsultationFields = {
   exame: string;
   diagnostico: string;
   conduta: string;
+  prescricao: string;
   observacoes: string;
 };
 
@@ -68,6 +69,7 @@ const emptyFields = (): ConsultationFields => ({
   exame: "",
   diagnostico: "",
   conduta: "",
+  prescricao: "",
   observacoes: "",
 });
 
@@ -90,6 +92,8 @@ function parseStructuredNotes(raw: string | null | undefined): ConsultationField
     if (normalized === "EXAME") return "exame";
     if (normalized === "DIAGNOSTICO") return "diagnostico";
     if (normalized === "CONDUTA") return "conduta";
+    if (normalized === "PRESCRICAO" || normalized === "PRESCRICAO")
+      return "prescricao";
     if (normalized === "OBSERVACOES" || normalized === "OBSERVACAO")
       return "observacoes";
     return null;
@@ -100,7 +104,7 @@ function parseStructuredNotes(raw: string | null | undefined): ConsultationField
 
   for (const line of lines) {
     const match = line.match(
-      /^\s*(QUEIXA|EXAME|DIAGN[ÓO]STICO|CONDUTA|OBSERVA[CÇ][AÃ]O(?:ES)?):\s*$/i
+      /^\s*(QUEIXA|EXAME|DIAGN[ÓO]STICO|CONDUTA|PRESCRI[CÇ][AÃ]O|OBSERVA[CÇ][AÃ]O(?:ES)?):\s*$/i
     );
 
     if (match) {
@@ -123,6 +127,7 @@ function parseStructuredNotes(raw: string | null | undefined): ConsultationField
     exame: next.exame.trim(),
     diagnostico: next.diagnostico.trim(),
     conduta: next.conduta.trim(),
+    prescricao: next.prescricao.trim(),
     observacoes: next.observacoes.trim(),
   };
 }
@@ -133,6 +138,7 @@ function buildStructuredNotes(fields: ConsultationFields): string {
     { title: "EXAME:", content: fields.exame.trim() },
     { title: "DIAGNÓSTICO:", content: fields.diagnostico.trim() },
     { title: "CONDUTA:", content: fields.conduta.trim() },
+    { title: "PRESCRIÇÃO:", content: fields.prescricao.trim() },
     { title: "OBSERVAÇÕES:", content: fields.observacoes.trim() },
   ].filter((b) => b.content.length > 0);
 
@@ -161,6 +167,9 @@ export default function ConsultaMedica() {
   const [fields, setFields] = useState<ConsultationFields>(emptyFields());
 
   const composedNotes = useMemo(() => buildStructuredNotes(fields), [fields]);
+
+  const [pdfCrmv, setPdfCrmv] = useState<string>("");
+  const [pdfIncludeCrmv, setPdfIncludeCrmv] = useState<boolean>(false);
 
   const [contextPetName, setContextPetName] = useState<string>("");
   const [contextTutorName, setContextTutorName] = useState<string>("");
@@ -541,6 +550,7 @@ export default function ConsultaMedica() {
         { title: "Exame", content: fields.exame },
         { title: "Diagnóstico", content: fields.diagnostico },
         { title: "Conduta", content: fields.conduta },
+        { title: "Prescrição", content: fields.prescricao },
         { title: "Observações", content: fields.observacoes },
       ].filter((s) => (s.content ?? "").trim().length > 0);
 
@@ -571,10 +581,12 @@ export default function ConsultaMedica() {
               : role
                 ? role.toUpperCase()
                 : null,
+          crmv: pdfCrmv.trim() || null,
         },
         options: {
           // 1 página apenas: sem capa
           includeCoverPage: false,
+          includeCrmv: pdfIncludeCrmv,
         },
       });
 
@@ -701,9 +713,29 @@ export default function ConsultaMedica() {
                     onChange={(e) =>
                       setFields((prev) => ({ ...prev, conduta: e.target.value }))
                     }
-                    placeholder="Tratamento / conduta / prescrição..."
+                    placeholder="Tratamento / conduta..."
                     maxLength={1200}
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">
+                    Prescrição
+                  </label>
+                  <Textarea
+                    value={fields.prescricao}
+                    onChange={(e) =>
+                      setFields((prev) => ({
+                        ...prev,
+                        prescricao: e.target.value,
+                      }))
+                    }
+                    placeholder="Uma medicação por linha (medicação — dose — frequência — duração)"
+                    maxLength={1200}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Dica: 1 item por linha para sair em lista no PDF.
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -723,14 +755,37 @@ export default function ConsultaMedica() {
                   />
                 </div>
 
-                <div className="text-xs text-muted-foreground">
-                  {composedNotes.length}/5000
+                <div className="space-y-3">
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">CRMV (opcional)</label>
+                      <Input
+                        value={pdfCrmv}
+                        onChange={(e) => setPdfCrmv(e.target.value)}
+                        placeholder="Ex: CRMV-SP 12345"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-foreground">Mostrar no PDF</label>
+                      <label className="flex items-center gap-2 text-sm text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={pdfIncludeCrmv}
+                          onChange={(e) => setPdfIncludeCrmv(e.target.checked)}
+                        />
+                        Incluir CRMV na assinatura
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    {composedNotes.length}/5000
+                  </div>
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
                 <Button
-                  variant="secondary"
                   onClick={handleSaveNotes}
                   disabled={isSaving || isFinalizing || isGeneratingPdf}
                 >
