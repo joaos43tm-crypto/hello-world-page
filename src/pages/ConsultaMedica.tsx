@@ -537,9 +537,10 @@ export default function ConsultaMedica() {
     try {
       const [{ data: settings }, { data: pet, error: petError }] =
         await Promise.all([
+          // Public minimal settings view (no sensitive contact/printer data)
           supabase
-            .from("store_settings")
-            .select("store_name,phone,email,address")
+            .from("store_settings_public")
+            .select("store_name")
             .limit(1)
             .maybeSingle(),
           supabase
@@ -564,7 +565,7 @@ export default function ConsultaMedica() {
       ].filter((s) => (s.content ?? "").trim().length > 0);
 
       const blob = await generateConsultationPdf({
-        store: settings ?? {},
+        store: { store_name: settings?.store_name ?? null },
         tutor: {
           name: tutor.name,
           phone: tutor.phone,

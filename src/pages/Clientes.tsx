@@ -64,7 +64,7 @@ export default function Clientes() {
         tutorsApi.getAll(),
         petsApi.getAll(),
         clientPlansApi.getAll(),
-        supabase.from('store_settings').select('plans_enabled').limit(1).maybeSingle(),
+        supabase.from('store_settings_public').select('plans_enabled').limit(1).maybeSingle(),
       ]);
       setTutors(tutorsData);
       setPets(petsData);
