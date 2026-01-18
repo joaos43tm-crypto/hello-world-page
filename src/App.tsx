@@ -16,7 +16,6 @@ import Vendas from "./pages/Vendas";
 import Relatorios from "./pages/Relatorios";
 import Servicos from "./pages/Servicos";
 import Produtos from "./pages/Produtos";
-import Profissionais from "./pages/Profissionais";
 import Configuracoes from "./pages/Configuracoes";
 import Planos from "./pages/Planos";
 import NaoAutorizado from "./pages/NaoAutorizado";
@@ -47,7 +46,6 @@ const App = () => (
 
             <Route path="/servicos" element={<RoleRoute allow={["admin"]}><Servicos /></RoleRoute>} />
             <Route path="/produtos" element={<RoleRoute allow={["admin"]}><Produtos /></RoleRoute>} />
-            <Route path="/profissionais" element={<RoleRoute allow={["admin"]}><Profissionais /></RoleRoute>} />
             <Route path="/configuracoes" element={<RoleRoute allow={["admin"]}><Configuracoes /></RoleRoute>} />
             <Route path="/planos" element={<RoleRoute allow={["admin"]}><Planos /></RoleRoute>} />
 
