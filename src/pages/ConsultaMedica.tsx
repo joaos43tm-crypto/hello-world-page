@@ -168,8 +168,8 @@ export default function ConsultaMedica() {
 
   const composedNotes = useMemo(() => buildStructuredNotes(fields), [fields]);
 
-  const [pdfCrmv, setPdfCrmv] = useState<string>("");
-  const [pdfIncludeCrmv, setPdfIncludeCrmv] = useState<boolean>(false);
+  const [pdfCrmv, setPdfCrmv] = useState<string>(profile?.crmv ?? "");
+  const [pdfIncludeCrmv, setPdfIncludeCrmv] = useState<boolean>(!!profile?.crmv);
 
   const [contextPetName, setContextPetName] = useState<string>("");
   const [contextTutorName, setContextTutorName] = useState<string>("");
@@ -379,6 +379,15 @@ export default function ConsultaMedica() {
     setContextPetName(selectedAppointment.petName ?? "");
     setContextTutorName(selectedAppointment.tutorName ?? "");
   }, [selectedAppointment]);
+
+  // Preenche CRMV automaticamente do cadastro do usuário (se existir), mas mantém editável.
+  useEffect(() => {
+    const crmv = (profile as any)?.crmv as string | undefined;
+    if (crmv && !pdfCrmv) {
+      setPdfCrmv(crmv);
+      setPdfIncludeCrmv(true);
+    }
+  }, [profile, pdfCrmv]);
 
   const handleStart = async () => {
     if (!user) return;
