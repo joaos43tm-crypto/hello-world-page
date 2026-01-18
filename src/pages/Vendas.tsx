@@ -48,6 +48,8 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { generateCashClosingPdf } from "@/lib/pdv/cashClosingPdf";
+import { generateSaleReceiptPdf } from "@/lib/pdv/saleReceiptPdf";
+import { openAndPrintPdfBytes } from "@/lib/pdv/printPdf";
 
 interface CartItem {
   id: string;
@@ -99,6 +101,9 @@ export default function Vendas() {
   const [movementDialog, setMovementDialog] = useState<null | "sangria" | "suprimento">(null);
   const [closeCashDialog, setCloseCashDialog] = useState(false);
 
+  const [printerEnabled, setPrinterEnabled] = useState(false);
+  const [storeName, setStoreName] = useState("PetControl");
+
   const [openingBalanceText, setOpeningBalanceText] = useState("0,00");
   const [movementAmountText, setMovementAmountText] = useState("0,00");
   const [movementNotes, setMovementNotes] = useState("");
@@ -136,6 +141,23 @@ export default function Vendas() {
       }
     };
 
+    const loadPrinter = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("store_settings")
+          .select("store_name, printer_enabled")
+          .limit(1)
+          .maybeSingle();
+        if (error) throw error;
+        setStoreName(data?.store_name || "PetControl");
+        setPrinterEnabled(!!data?.printer_enabled);
+      } catch (e) {
+        // fallback silencioso
+        setStoreName("PetControl");
+        setPrinterEnabled(false);
+      }
+    };
+
     const loadCash = async () => {
       setIsCashLoading(true);
       try {
@@ -159,6 +181,7 @@ export default function Vendas() {
     };
 
     loadData();
+    loadPrinter();
     loadCash();
   }, [toast]);
 
@@ -298,17 +321,8 @@ export default function Vendas() {
         description: `Diferença: R$ ${(closingBalance - expectedCash).toFixed(2)}`,
       });
 
-      // Confirma antes de imprimir
       const shouldPrint = window.confirm("Imprimir fechamento agora?");
       if (shouldPrint) {
-        const { data: settings } = await supabase
-          .from("store_settings_public")
-          .select("store_name")
-          .limit(1)
-          .maybeSingle();
-
-        const storeName = settings?.store_name || "PetControl";
-
         const pdfBytes = await generateCashClosingPdf({
           storeName,
           session: {
@@ -329,20 +343,7 @@ export default function Vendas() {
           notes: closingNotes || null,
         });
 
-        const blobPart = pdfBytes.buffer.slice(
-          pdfBytes.byteOffset,
-          pdfBytes.byteOffset + pdfBytes.byteLength
-        );
-        const blob = new Blob([blobPart as unknown as BlobPart], {
-          type: "application/pdf",
-        });
-        const url = URL.createObjectURL(blob);
-        const w = window.open(url, "_blank");
-        if (w) {
-          w.addEventListener("load", () => {
-            w.print();
-          });
-        }
+        await openAndPrintPdfBytes(pdfBytes);
       }
 
       setClosingBalanceText("0,00");
@@ -379,7 +380,7 @@ export default function Vendas() {
 
     setIsProcessing(true);
     try {
-      await salesApi.create(
+      const created = await salesApi.create(
         {
           tutor_id: selectedTutor || null,
           total_amount: total,
@@ -394,6 +395,30 @@ export default function Vendas() {
           subtotal: item.price * item.quantity,
         }))
       );
+
+      // Impressão automática do recibo (PDF). Em ambiente com impressora térmica instalada,
+      // o navegador imprimirá para ela via diálogo/config padrão do sistema.
+      if (printerEnabled) {
+        const receiptBytes = await generateSaleReceiptPdf({
+          storeName,
+          sale: {
+            id: created.id,
+            createdAt: created.created_at || new Date().toISOString(),
+            paymentMethod,
+            customerName:
+              tutors.find((t) => t.id === selectedTutor)?.name ||
+              (selectedTutor ? "Cliente" : null),
+          },
+          items: cart.map((c) => ({
+            name: c.name,
+            quantity: c.quantity,
+            unitPrice: c.price,
+            subtotal: c.price * c.quantity,
+          })),
+          total,
+        });
+        await openAndPrintPdfBytes(receiptBytes);
+      }
 
       setShowSuccess(true);
       setTimeout(() => {
