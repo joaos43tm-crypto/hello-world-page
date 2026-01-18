@@ -31,6 +31,11 @@ export function RoleRoute({ children, allow }: RoleRouteProps) {
     return <Navigate to="/auth" replace />;
   }
 
+  // Admin sempre tem acesso total
+  if (role === "admin") {
+    return <>{children}</>;
+  }
+
   if (!role || !allow.includes(role as AppRole)) {
     return (
       <Navigate
