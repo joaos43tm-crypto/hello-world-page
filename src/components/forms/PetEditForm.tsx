@@ -13,6 +13,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Save, Loader2, Trash2 } from "lucide-react";
 import type { Pet, PetSize, PetTemperament } from "@/lib/petcontrol.api";
+import { ConsultationHistory } from "@/components/medical/ConsultationHistory";
 
 interface PetEditFormProps {
   pet: Pet;
@@ -53,7 +54,7 @@ export function PetEditForm({ pet, onSave, onDelete, onCancel }: PetEditFormProp
   const handleDelete = async () => {
     if (!onDelete) return;
     if (!window.confirm(`Tem certeza que deseja excluir ${pet.name}?`)) return;
-    
+
     setIsDeleting(true);
     try {
       await onDelete();
@@ -63,128 +64,126 @@ export function PetEditForm({ pet, onSave, onDelete, onCancel }: PetEditFormProp
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="petName">Nome do Pet *</Label>
-        <Input
-          id="petName"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Nome do pet"
-          className="h-12"
-          required
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="breed">Raça</Label>
-        <Input
-          id="breed"
-          value={breed}
-          onChange={(e) => setBreed(e.target.value)}
-          placeholder="Ex: Golden Retriever"
-          className="h-12"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
+    <div className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label>Porte</Label>
-          <Select value={size} onValueChange={(v) => setSize(v as PetSize)}>
-            <SelectTrigger className="h-12">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pequeno">Pequeno</SelectItem>
-              <SelectItem value="medio">Médio</SelectItem>
-              <SelectItem value="grande">Grande</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label htmlFor="petName">Nome do Pet *</Label>
+          <Input
+            id="petName"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Nome do pet"
+            className="h-12"
+            required
+          />
         </div>
 
         <div className="space-y-2">
-          <Label>Temperamento</Label>
-          <Select value={temperament} onValueChange={(v) => setTemperament(v as PetTemperament)}>
-            <SelectTrigger className="h-12">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="docil">Dócil</SelectItem>
-              <SelectItem value="agitado">Agitado</SelectItem>
-              <SelectItem value="agressivo">Agressivo</SelectItem>
-              <SelectItem value="timido">Tímido</SelectItem>
-            </SelectContent>
-          </Select>
+          <Label htmlFor="breed">Raça</Label>
+          <Input
+            id="breed"
+            value={breed}
+            onChange={(e) => setBreed(e.target.value)}
+            placeholder="Ex: Golden Retriever"
+            className="h-12"
+          />
         </div>
-      </div>
 
-      <div className="flex items-center justify-between p-4 bg-orange-50 rounded-xl">
-        <span className="text-orange-600 font-medium">⚠️ Pet agressivo?</span>
-        <Switch
-          checked={isAggressive}
-          onCheckedChange={setIsAggressive}
-        />
-      </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Porte</Label>
+            <Select value={size} onValueChange={(v) => setSize(v as PetSize)}>
+              <SelectTrigger className="h-12">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pequeno">Pequeno</SelectItem>
+                <SelectItem value="medio">Médio</SelectItem>
+                <SelectItem value="grande">Grande</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="allergies">Alergias</Label>
-        <Input
-          id="allergies"
-          value={allergies}
-          onChange={(e) => setAllergies(e.target.value)}
-          placeholder="Liste as alergias conhecidas"
-          className="h-12"
-        />
-      </div>
+          <div className="space-y-2">
+            <Label>Temperamento</Label>
+            <Select
+              value={temperament}
+              onValueChange={(v) => setTemperament(v as PetTemperament)}
+            >
+              <SelectTrigger className="h-12">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="docil">Dócil</SelectItem>
+                <SelectItem value="agitado">Agitado</SelectItem>
+                <SelectItem value="agressivo">Agressivo</SelectItem>
+                <SelectItem value="timido">Tímido</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="petNotes">Observações</Label>
-        <Textarea
-          id="petNotes"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Cuidados especiais, preferências..."
-          className="min-h-[80px]"
-        />
-      </div>
+        <div className="flex items-center justify-between p-4 bg-orange-50 rounded-xl">
+          <span className="text-orange-600 font-medium">⚠️ Pet agressivo?</span>
+          <Switch checked={isAggressive} onCheckedChange={setIsAggressive} />
+        </div>
 
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onCancel}
-          className="flex-1"
-        >
-          Cancelar
-        </Button>
-        {onDelete && (
+        <div className="space-y-2">
+          <Label htmlFor="allergies">Alergias</Label>
+          <Input
+            id="allergies"
+            value={allergies}
+            onChange={(e) => setAllergies(e.target.value)}
+            placeholder="Liste as alergias conhecidas"
+            className="h-12"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="petNotes">Observações</Label>
+          <Textarea
+            id="petNotes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Cuidados especiais, preferências..."
+            className="min-h-[80px]"
+          />
+        </div>
+
+        <div className="flex gap-2">
           <Button
             type="button"
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={isDeleting}
-            className="gap-2"
+            variant="outline"
+            onClick={onCancel}
+            className="flex-1"
           >
-            {isDeleting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Trash2 size={18} />
-            )}
+            Cancelar
           </Button>
-        )}
-        <Button
-          type="submit"
-          disabled={!name || isLoading}
-          className="flex-1 gap-2"
-        >
-          {isLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Save size={18} />
+          {onDelete && (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="gap-2"
+            >
+              {isDeleting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 size={18} />
+              )}
+            </Button>
           )}
-          Salvar
-        </Button>
-      </div>
-    </form>
+          <Button type="submit" disabled={!name || isLoading} className="flex-1 gap-2">
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save size={18} />}
+            Salvar
+          </Button>
+        </div>
+      </form>
+
+      {/* Prontuário */}
+      <ConsultationHistory petId={pet.id} title="Histórico de consultas (Pet)" />
+    </div>
   );
 }
+

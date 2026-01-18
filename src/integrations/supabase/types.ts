@@ -143,41 +143,61 @@ export type Database = {
       }
       medical_consultations: {
         Row: {
+          appointment_id: string | null
           created_at: string
           created_by: string
           ended_at: string | null
           id: string
           notes: string | null
           office_id: string
+          pet_id: string | null
           started_at: string
           updated_at: string
         }
         Insert: {
+          appointment_id?: string | null
           created_at?: string
           created_by: string
           ended_at?: string | null
           id?: string
           notes?: string | null
           office_id: string
+          pet_id?: string | null
           started_at?: string
           updated_at?: string
         }
         Update: {
+          appointment_id?: string | null
           created_at?: string
           created_by?: string
           ended_at?: string | null
           id?: string
           notes?: string | null
           office_id?: string
+          pet_id?: string | null
           started_at?: string
           updated_at?: string
         }
         Relationships: [
           {
+            foreignKeyName: "medical_consultations_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "medical_consultations_office_id_fkey"
             columns: ["office_id"]
             isOneToOne: false
             referencedRelation: "medical_offices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medical_consultations_pet_id_fkey"
+            columns: ["pet_id"]
+            isOneToOne: false
+            referencedRelation: "pets"
             referencedColumns: ["id"]
           },
         ]
