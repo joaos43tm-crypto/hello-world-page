@@ -81,6 +81,89 @@ export type Database = {
           },
         ]
       }
+      cash_register_movements: {
+        Row: {
+          amount: number
+          cnpj: string
+          created_at: string
+          created_by: string
+          id: string
+          movement_type: Database["public"]["Enums"]["cash_movement_type"]
+          notes: string | null
+          session_id: string
+        }
+        Insert: {
+          amount: number
+          cnpj: string
+          created_at?: string
+          created_by: string
+          id?: string
+          movement_type: Database["public"]["Enums"]["cash_movement_type"]
+          notes?: string | null
+          session_id: string
+        }
+        Update: {
+          amount?: number
+          cnpj?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          movement_type?: Database["public"]["Enums"]["cash_movement_type"]
+          notes?: string | null
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_register_movements_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_register_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cash_register_sessions: {
+        Row: {
+          closed_at: string | null
+          closed_by: string | null
+          closing_balance: number | null
+          closing_notes: string | null
+          cnpj: string
+          created_at: string
+          id: string
+          opened_at: string
+          opened_by: string
+          opening_balance: number
+          updated_at: string
+        }
+        Insert: {
+          closed_at?: string | null
+          closed_by?: string | null
+          closing_balance?: number | null
+          closing_notes?: string | null
+          cnpj: string
+          created_at?: string
+          id?: string
+          opened_at?: string
+          opened_by: string
+          opening_balance?: number
+          updated_at?: string
+        }
+        Update: {
+          closed_at?: string | null
+          closed_by?: string | null
+          closing_balance?: number | null
+          closing_notes?: string | null
+          cnpj?: string
+          created_at?: string
+          id?: string
+          opened_at?: string
+          opened_by?: string
+          opening_balance?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       client_plans: {
         Row: {
           created_at: string | null
@@ -540,6 +623,7 @@ export type Database = {
       }
       sales: {
         Row: {
+          cash_session_id: string | null
           created_at: string | null
           id: string
           notes: string | null
@@ -548,6 +632,7 @@ export type Database = {
           tutor_id: string | null
         }
         Insert: {
+          cash_session_id?: string | null
           created_at?: string | null
           id?: string
           notes?: string | null
@@ -556,6 +641,7 @@ export type Database = {
           tutor_id?: string | null
         }
         Update: {
+          cash_session_id?: string | null
           created_at?: string | null
           id?: string
           notes?: string | null
@@ -564,6 +650,13 @@ export type Database = {
           tutor_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "sales_cash_session_id_fkey"
+            columns: ["cash_session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_register_sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sales_tutor_id_fkey"
             columns: ["tutor_id"]
@@ -833,6 +926,7 @@ export type Database = {
         | "em_atendimento"
         | "aguardando_busca"
         | "finalizado"
+      cash_movement_type: "sangria" | "suprimento"
       pet_size: "pequeno" | "medio" | "grande"
       pet_temperament: "docil" | "agitado" | "agressivo" | "timido"
     }
@@ -969,6 +1063,7 @@ export const Constants = {
         "aguardando_busca",
         "finalizado",
       ],
+      cash_movement_type: ["sangria", "suprimento"],
       pet_size: ["pequeno", "medio", "grande"],
       pet_temperament: ["docil", "agitado", "agressivo", "timido"],
     },

@@ -142,6 +142,7 @@ export interface Sale {
   total_amount: number;
   payment_method?: string;
   notes?: string | null;
+  cash_session_id?: string | null;
   created_at?: string;
   tutor?: Tutor;
   items?: SaleItem[];
@@ -158,6 +159,33 @@ export interface SaleItem {
   created_at?: string;
   product?: Product;
   service?: Service;
+}
+
+export type CashMovementType = "sangria" | "suprimento";
+
+export interface CashRegisterSession {
+  id: string;
+  cnpj: string;
+  opened_by: string;
+  opened_at: string;
+  opening_balance: number;
+  closed_by?: string | null;
+  closed_at?: string | null;
+  closing_balance?: number | null;
+  closing_notes?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CashRegisterMovement {
+  id: string;
+  session_id: string;
+  cnpj: string;
+  movement_type: CashMovementType;
+  amount: number;
+  notes?: string | null;
+  created_by: string;
+  created_at: string;
 }
 
 // ============================================
@@ -828,6 +856,148 @@ export const clientPlansApi = {
 };
 
 // ============================================
+// CAIXA (PDV)
+// ============================================
+
+export const cashRegisterApi = {
+  async getOpenSession(): Promise<CashRegisterSession | null> {
+    const { data, error } = await supabase
+      .from("cash_register_sessions")
+      .select("*")
+      .is("closed_at", null)
+      .order("opened_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
+  async openSession(input: { opening_balance?: number }): Promise<CashRegisterSession> {
+    const { data: profileData, error: profileErr } = await supabase
+      .from("profiles")
+      .select("cnpj")
+      .eq("user_id", (await supabase.auth.getUser()).data.user?.id ?? "")
+      .maybeSingle();
+
+    if (profileErr) throw profileErr;
+    const cnpj = profileData?.cnpj;
+    if (!cnpj) throw new Error("CNPJ não encontrado no perfil do usuário");
+
+    const { data: userRes, error: userErr } = await supabase.auth.getUser();
+    if (userErr) throw userErr;
+    if (!userRes.user) throw new Error("Usuário não autenticado");
+
+    const { data, error } = await supabase
+      .from("cash_register_sessions")
+      .insert({
+        cnpj,
+        opened_by: userRes.user.id,
+        opening_balance: input.opening_balance ?? 0,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async addMovement(input: {
+    session_id: string;
+    movement_type: CashMovementType;
+    amount: number;
+    notes?: string | null;
+  }): Promise<CashRegisterMovement> {
+    const { data: userRes, error: userErr } = await supabase.auth.getUser();
+    if (userErr) throw userErr;
+    if (!userRes.user) throw new Error("Usuário não autenticado");
+
+    // Pega cnpj pelo profile (RLS garante acesso)
+    const { data: profileData, error: profileErr } = await supabase
+      .from("profiles")
+      .select("cnpj")
+      .eq("user_id", userRes.user.id)
+      .maybeSingle();
+    if (profileErr) throw profileErr;
+    const cnpj = profileData?.cnpj;
+    if (!cnpj) throw new Error("CNPJ não encontrado no perfil do usuário");
+
+    const { data, error } = await supabase
+      .from("cash_register_movements")
+      .insert({
+        session_id: input.session_id,
+        cnpj,
+        movement_type: input.movement_type,
+        amount: input.amount,
+        notes: input.notes ?? null,
+        created_by: userRes.user.id,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  },
+
+  async getSessionSummary(sessionId: string): Promise<{
+    salesTotal: number;
+    salesCount: number;
+    sangriaTotal: number;
+    suprimentoTotal: number;
+  }> {
+    const [{ data: sales, error: salesErr }, { data: moves, error: movesErr }] =
+      await Promise.all([
+        supabase
+          .from("sales")
+          .select("id,total_amount")
+          .eq("cash_session_id", sessionId),
+        supabase
+          .from("cash_register_movements")
+          .select("movement_type,amount")
+          .eq("session_id", sessionId),
+      ]);
+
+    if (salesErr) throw salesErr;
+    if (movesErr) throw movesErr;
+
+    const salesTotal = (sales ?? []).reduce((sum: number, s: any) => sum + Number(s.total_amount ?? 0), 0);
+    const salesCount = (sales ?? []).length;
+
+    const sangriaTotal = (moves ?? [])
+      .filter((m: any) => m.movement_type === "sangria")
+      .reduce((sum: number, m: any) => sum + Number(m.amount ?? 0), 0);
+
+    const suprimentoTotal = (moves ?? [])
+      .filter((m: any) => m.movement_type === "suprimento")
+      .reduce((sum: number, m: any) => sum + Number(m.amount ?? 0), 0);
+
+    return { salesTotal, salesCount, sangriaTotal, suprimentoTotal };
+  },
+
+  async closeSession(input: {
+    session_id: string;
+    closing_balance: number;
+    closing_notes?: string | null;
+  }): Promise<CashRegisterSession> {
+    const { data: userRes, error: userErr } = await supabase.auth.getUser();
+    if (userErr) throw userErr;
+    if (!userRes.user) throw new Error("Usuário não autenticado");
+
+    const { data, error } = await supabase
+      .from("cash_register_sessions")
+      .update({
+        closed_by: userRes.user.id,
+        closed_at: new Date().toISOString(),
+        closing_balance: input.closing_balance,
+        closing_notes: input.closing_notes ?? null,
+      })
+      .eq("id", input.session_id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+};
+
+// ============================================
 // VENDAS
 // ============================================
 
@@ -876,6 +1046,7 @@ export const salesApi = {
         total_amount: sale.total_amount,
         payment_method: sale.payment_method,
         notes: sale.notes,
+        cash_session_id: sale.cash_session_id ?? null,
       })
       .select()
       .single();
@@ -910,8 +1081,6 @@ export const salesApi = {
     if (error) throw error;
   },
 };
-// RELATÓRIOS
-// ============================================
 
 export const reportsApi = {
   async getDailyRevenue(date: string): Promise<number> {
