@@ -872,6 +872,27 @@ export const cashRegisterApi = {
     return data;
   },
 
+  async getSessionsByDateRange(startDate: string, endDate: string): Promise<CashRegisterSession[]> {
+    const { data, error } = await supabase
+      .from("cash_register_sessions")
+      .select("*")
+      .gte("opened_at", `${startDate}T00:00:00`)
+      .lte("opened_at", `${endDate}T23:59:59`)
+      .order("opened_at", { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
+  async getById(id: string): Promise<CashRegisterSession | null> {
+    const { data, error } = await supabase
+      .from("cash_register_sessions")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+
   async openSession(input: { opening_balance?: number }): Promise<CashRegisterSession> {
     const { data: profileData, error: profileErr } = await supabase
       .from("profiles")
@@ -957,7 +978,10 @@ export const cashRegisterApi = {
     if (salesErr) throw salesErr;
     if (movesErr) throw movesErr;
 
-    const salesTotal = (sales ?? []).reduce((sum: number, s: any) => sum + Number(s.total_amount ?? 0), 0);
+    const salesTotal = (sales ?? []).reduce(
+      (sum: number, s: any) => sum + Number(s.total_amount ?? 0),
+      0
+    );
     const salesCount = (sales ?? []).length;
 
     const sangriaTotal = (moves ?? [])
@@ -1014,7 +1038,9 @@ export const salesApi = {
   async getById(id: string): Promise<Sale | null> {
     const { data, error } = await supabase
       .from('sales')
-      .select('*, tutor:tutors(*)')
+      .select(
+        '*, tutor:tutors(*), items:sale_items(*, product:products(*), service:services(*))'
+      )
       .eq('id', id)
       .maybeSingle();
     if (error) throw error;
