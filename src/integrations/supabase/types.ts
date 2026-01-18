@@ -722,7 +722,82 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      medical_consultations_safe: {
+        Row: {
+          appointment_id: string | null
+          created_at: string | null
+          created_by: string | null
+          ended_at: string | null
+          id: string | null
+          office_id: string | null
+          pet_id: string | null
+          started_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          appointment_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          ended_at?: string | null
+          id?: string | null
+          office_id?: string | null
+          pet_id?: string | null
+          started_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          appointment_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          ended_at?: string | null
+          id?: string | null
+          office_id?: string | null
+          pet_id?: string | null
+          started_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "medical_consultations_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medical_consultations_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "medical_offices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "medical_consultations_pet_id_fkey"
+            columns: ["pet_id"]
+            isOneToOne: false
+            referencedRelation: "pets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      store_settings_public: {
+        Row: {
+          id: string | null
+          plans_enabled: boolean | null
+          store_name: string | null
+        }
+        Insert: {
+          id?: string | null
+          plans_enabled?: boolean | null
+          store_name?: string | null
+        }
+        Update: {
+          id?: string | null
+          plans_enabled?: boolean | null
+          store_name?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       check_registration_code: {
