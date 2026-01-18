@@ -21,7 +21,14 @@ export type ConsultationPdfInput = {
     started_at: string;
     ended_at?: string | null;
     office_name?: string | null;
+    /**
+     * Texto completo (compatibilidade). Se `sections` existir, ele terá prioridade.
+     */
     notes?: string | null;
+    /**
+     * Seções estruturadas para o PDF (ex: Queixa, Exame, Diagnóstico, Conduta).
+     */
+    sections?: Array<{ title: string; content: string }>;
   };
   professional?: {
     name?: string | null;
@@ -99,7 +106,12 @@ export async function generateConsultationPdf(input: ConsultationPdfInput) {
 
   const drawText = (
     text: string,
-    opts?: { bold?: boolean; size?: number; x?: number; color?: ReturnType<typeof rgb> }
+    opts?: {
+      bold?: boolean;
+      size?: number;
+      x?: number;
+      color?: ReturnType<typeof rgb>;
+    }
   ) => {
     const size = opts?.size ?? baseFontSize;
     const chosenFont = opts?.bold ? fontBold : font;
@@ -132,8 +144,20 @@ export async function generateConsultationPdf(input: ConsultationPdfInput) {
     const bottomBarH = 10;
 
     // top/bottom bars
-    page.drawRectangle({ x: 0, y: h - topBarH, width: w, height: topBarH, color: rgb(0.20, 0.75, 0.40) });
-    page.drawRectangle({ x: 0, y: 0, width: w, height: bottomBarH, color: rgb(0.20, 0.75, 0.40) });
+    page.drawRectangle({
+      x: 0,
+      y: h - topBarH,
+      width: w,
+      height: topBarH,
+      color: rgb(0.2, 0.75, 0.4),
+    });
+    page.drawRectangle({
+      x: 0,
+      y: 0,
+      width: w,
+      height: bottomBarH,
+      color: rgb(0.2, 0.75, 0.4),
+    });
 
     // subtle border
     page.drawRectangle({
@@ -141,32 +165,66 @@ export async function generateConsultationPdf(input: ConsultationPdfInput) {
       y: 12,
       width: w - 24,
       height: h - 24,
-      borderColor: rgb(0.20, 0.75, 0.40),
+      borderColor: rgb(0.2, 0.75, 0.4),
       borderWidth: 2,
       opacity: 0.65,
     });
 
     // simple watermark paw-like shapes
     const watermark = () => {
-      const baseColor = rgb(0.55, 0.60, 0.68);
+      const baseColor = rgb(0.55, 0.6, 0.68);
       const paw = (cx: number, cy: number, s: number) => {
         // pad
-        page.drawEllipse({ x: cx, y: cy, xScale: 26 * s, yScale: 22 * s, color: baseColor, opacity: 0.08 });
+        page.drawEllipse({
+          x: cx,
+          y: cy,
+          xScale: 26 * s,
+          yScale: 22 * s,
+          color: baseColor,
+          opacity: 0.08,
+        });
         // toes
-        page.drawEllipse({ x: cx - 18 * s, y: cy + 26 * s, xScale: 10 * s, yScale: 14 * s, color: baseColor, opacity: 0.08 });
-        page.drawEllipse({ x: cx, y: cy + 32 * s, xScale: 10 * s, yScale: 14 * s, color: baseColor, opacity: 0.08 });
-        page.drawEllipse({ x: cx + 18 * s, y: cy + 26 * s, xScale: 10 * s, yScale: 14 * s, color: baseColor, opacity: 0.08 });
+        page.drawEllipse({
+          x: cx - 18 * s,
+          y: cy + 26 * s,
+          xScale: 10 * s,
+          yScale: 14 * s,
+          color: baseColor,
+          opacity: 0.08,
+        });
+        page.drawEllipse({
+          x: cx,
+          y: cy + 32 * s,
+          xScale: 10 * s,
+          yScale: 14 * s,
+          color: baseColor,
+          opacity: 0.08,
+        });
+        page.drawEllipse({
+          x: cx + 18 * s,
+          y: cy + 26 * s,
+          xScale: 10 * s,
+          yScale: 14 * s,
+          color: baseColor,
+          opacity: 0.08,
+        });
       };
-      paw(w * 0.70, h * 0.62, 1.1);
+      paw(w * 0.7, h * 0.62, 1.1);
       paw(w * 0.58, h * 0.48, 0.9);
-      paw(w * 0.80, h * 0.42, 0.8);
+      paw(w * 0.8, h * 0.42, 0.8);
     };
     watermark();
 
     // "logo" block + store name
     const logoX = marginX;
     const logoY = h - 140;
-    page.drawRectangle({ x: logoX, y: logoY, width: 34, height: 34, color: rgb(0.20, 0.75, 0.40) });
+    page.drawRectangle({
+      x: logoX,
+      y: logoY,
+      width: 34,
+      height: 34,
+      color: rgb(0.2, 0.75, 0.4),
+    });
     page.drawText("PC", {
       x: logoX + 8,
       y: logoY + 10,
@@ -225,7 +283,9 @@ export async function generateConsultationPdf(input: ConsultationPdfInput) {
   // Header
   drawText(storeName, { bold: true, size: 14, color: rgb(0.05, 0.18, 0.32) });
 
-  const contactBits = [input.store.phone, input.store.email].filter(Boolean).join(" • ");
+  const contactBits = [input.store.phone, input.store.email]
+    .filter(Boolean)
+    .join(" • ");
   if (contactBits) drawText(contactBits, { size: 9 });
   if (input.store.address) drawText(input.store.address, { size: 9 });
 
@@ -235,7 +295,9 @@ export async function generateConsultationPdf(input: ConsultationPdfInput) {
 
   // Patient
   drawText(`Cliente: ${input.tutor.name}`, { bold: true, size: 10 });
-  const tutorContact = [input.tutor.phone, input.tutor.email].filter(Boolean).join(" • ");
+  const tutorContact = [input.tutor.phone, input.tutor.email]
+    .filter(Boolean)
+    .join(" • ");
   if (tutorContact) drawText(`Contato: ${tutorContact}`, { size: 9 });
 
   drawText(`Pet: ${input.pet.name}`, { bold: true, size: 10 });
@@ -253,29 +315,69 @@ export async function generateConsultationPdf(input: ConsultationPdfInput) {
   }
 
   y -= 6;
-  drawText("Anotações", { bold: true, size: 11 });
 
-  const notes = (input.consultation.notes ?? "").trim();
-  const rawLines = notes ? wrapText(notes, 115) : ["(sem anotações)"];
+  const structured = (input.consultation.sections ?? [])
+    .map((s) => ({ title: s.title.trim(), content: (s.content ?? "").trim() }))
+    .filter((s) => s.title && s.content);
 
-  // We must keep the PDF to 1 page: truncate if needed.
-  const availableLines = Math.max(1, Math.floor((y - bottomMargin) / baseLineH));
+  const fallbackNotes = (input.consultation.notes ?? "").trim();
 
-  let linesToRender = rawLines;
-  if (rawLines.length > availableLines) {
-    const cut = Math.max(1, availableLines - 1);
-    linesToRender = [
-      ...rawLines.slice(0, cut),
-      "(conteúdo excedente omitido para caber em 1 página)",
-    ];
-  }
+  const sectionsToRender: Array<{ title: string; content: string }> =
+    structured.length > 0
+      ? structured
+      : [{ title: "Anotações", content: fallbackNotes || "(sem anotações)" }];
 
-  for (const line of linesToRender) {
-    if (y <= bottomMargin) break;
-    drawText(line, { size: baseFontSize });
+  const availableLinesTotal = Math.max(
+    1,
+    Math.floor((y - bottomMargin) / baseLineH)
+  );
+  let usedLines = 0;
+
+  const drawSection = (title: string, content: string) => {
+    if (usedLines >= availableLinesTotal) return false;
+
+    // Title line
+    drawText(title, { bold: true, size: 11 });
+    usedLines += 1;
+
+    const rawLines = wrapText(content, 115);
+
+    // Remaining lines for content
+    const remaining = Math.max(0, availableLinesTotal - usedLines);
+    const needsCut = rawLines.length > remaining;
+    const renderLines = needsCut
+      ? rawLines.slice(0, Math.max(0, remaining - 1))
+      : rawLines;
+
+    for (const line of renderLines) {
+      if (y <= bottomMargin) break;
+      drawText(line, { size: baseFontSize });
+      usedLines += 1;
+      if (usedLines >= availableLinesTotal) break;
+    }
+
+    if (needsCut && usedLines < availableLinesTotal) {
+      drawText("(conteúdo excedente omitido para caber em 1 página)", {
+        size: 9,
+      });
+      usedLines += 1;
+    }
+
+    // Small spacer if we still have room
+    if (usedLines < availableLinesTotal) {
+      y -= 2;
+    }
+
+    return true;
+  };
+
+  for (const s of sectionsToRender) {
+    const ok = drawSection(s.title, s.content);
+    if (!ok) break;
   }
 
   const pdfBytes = await pdfDoc.save();
   const bytes = new Uint8Array(pdfBytes);
   return new Blob([bytes.buffer as ArrayBuffer], { type: "application/pdf" });
 }
+
