@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dog, Mail, Lock, Building2, FileText, Key, LogIn, UserPlus, Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Dog, Mail, Lock, Building2, FileText, LogIn, UserPlus, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,7 +11,6 @@ import { z } from "zod";
 
 const emailSchema = z.string().email("E-mail inválido");
 const passwordSchema = z.string().min(6, "Senha deve ter pelo menos 6 caracteres");
-const codeSchema = z.string().min(4, "Código de cadastro é obrigatório");
 
 const normalizeCnpj = (value: string) => value.replace(/\D/g, "");
 const cnpjSchema = z
@@ -26,18 +25,12 @@ export default function Auth() {
   
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [cnpj, setCnpj] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [registrationCode, setRegistrationCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isValidatingCode, setIsValidatingCode] = useState(false);
-  const [codeValidation, setCodeValidation] = useState<{
-    valid: boolean;
-    cnpj?: string;
-    companyName?: string;
-  } | null>(null);
-  const [errors, setErrors] = useState<{ cnpj?: string; email?: string; password?: string; code?: string }>({});
+  const [errors, setErrors] = useState<{ cnpj?: string; companyName?: string; email?: string; password?: string }>({});
 
   // Redirect if already logged in
   useEffect(() => {
@@ -46,44 +39,10 @@ export default function Auth() {
     }
   }, [user, isLoading, navigate]);
 
-  // Validate registration code when it changes using secure RPC function
-  useEffect(() => {
-    if (mode === "signup" && registrationCode.length >= 4) {
-      const timer = setTimeout(async () => {
-        setIsValidatingCode(true);
-        try {
-          const { data, error } = await supabase
-            .rpc('check_registration_code', { _code: registrationCode.toUpperCase() });
-
-          if (error) throw error;
-
-          if (data && data.length > 0 && data[0].is_valid) {
-            setCodeValidation({
-              valid: true,
-              cnpj: data[0].cnpj,
-              companyName: data[0].company_name,
-            });
-          } else {
-            setCodeValidation({ valid: false });
-          }
-        } catch (error) {
-          console.error('Error validating code:', error);
-          setCodeValidation({ valid: false });
-        } finally {
-          setIsValidatingCode(false);
-        }
-      }, 500);
-
-      return () => clearTimeout(timer);
-    } else {
-      setCodeValidation(null);
-    }
-  }, [registrationCode, mode]);
-
   const validateForm = () => {
     const newErrors: typeof errors = {};
 
-    if (mode === "login") {
+    if (mode === "login" || mode === "signup") {
       const parsed = cnpjSchema.safeParse(cnpj);
       if (!parsed.success) {
         newErrors.cnpj = parsed.error.errors[0]?.message ?? "CNPJ inválido";
@@ -107,16 +66,8 @@ export default function Auth() {
     }
 
     if (mode === "signup") {
-      try {
-        codeSchema.parse(registrationCode);
-      } catch (e) {
-        if (e instanceof z.ZodError) {
-          newErrors.code = e.errors[0].message;
-        }
-      }
-
-      if (!codeValidation?.valid) {
-        newErrors.code = "Código de cadastro inválido ou já utilizado";
+      if (!companyName.trim()) {
+        newErrors.companyName = "Razão social é obrigatória";
       }
     }
 
@@ -202,16 +153,8 @@ export default function Auth() {
           navigate("/");
         }
       } else {
-        if (!codeValidation?.valid || !codeValidation.companyName || !codeValidation.cnpj) {
-          toast({
-            title: "Código inválido",
-            description: "Por favor, insira um código de cadastro válido.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        const { error } = await signUp(email, password, codeValidation.companyName, codeValidation.cnpj);
+        const normalizedCnpj = normalizeCnpj(cnpj);
+        const { error } = await signUp(email, password, companyName, normalizedCnpj);
         
         if (error) {
           if (error.message.includes("already registered")) {
@@ -228,12 +171,6 @@ export default function Auth() {
             });
           }
         } else {
-          // Mark code as used
-          await supabase.rpc('use_registration_code', { 
-            _code: registrationCode.toUpperCase(),
-            _user_id: (await supabase.auth.getUser()).data.user?.id
-          });
-
           // Ensure the first account gets admin privileges
           try {
             await supabase.functions.invoke("bootstrap-user", { body: {} });
@@ -311,63 +248,6 @@ export default function Auth() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "signup" && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="code" className="flex items-center gap-2">
-                    <Key size={16} />
-                    Código de Cadastro
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="code"
-                      type="text"
-                      value={registrationCode}
-                      onChange={(e) => setRegistrationCode(e.target.value.toUpperCase())}
-                      placeholder="Digite o código recebido"
-                      className="h-12 pr-12 uppercase"
-                    />
-                    {isValidatingCode && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                      </div>
-                    )}
-                    {!isValidatingCode && codeValidation && (
-                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                        {codeValidation.valid ? (
-                          <CheckCircle2 className="w-5 h-5 text-primary" />
-                        ) : (
-                          <AlertCircle className="w-5 h-5 text-destructive" />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {errors.code && (
-                    <p className="text-sm text-destructive">{errors.code}</p>
-                  )}
-                </div>
-
-                {codeValidation?.valid && (
-                  <div className="p-4 rounded-xl bg-primary/10 border border-primary/20 space-y-2">
-                    <div className="flex items-center gap-2 text-primary font-medium">
-                      <CheckCircle2 size={16} />
-                      Código válido!
-                    </div>
-                    <div className="space-y-1 text-sm">
-                      <p className="flex items-center gap-2">
-                        <Building2 size={14} className="text-muted-foreground" />
-                        <span className="font-medium">{codeValidation.companyName}</span>
-                      </p>
-                      <p className="flex items-center gap-2">
-                        <FileText size={14} className="text-muted-foreground" />
-                        <span>CNPJ: {codeValidation.cnpj}</span>
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
             {mode === "login" && (
               <div className="space-y-2">
                 <Label htmlFor="cnpj" className="flex items-center gap-2">
@@ -385,6 +265,45 @@ export default function Auth() {
                 />
                 {errors.cnpj && <p className="text-sm text-destructive">{errors.cnpj}</p>}
               </div>
+            )}
+
+            {mode === "signup" && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-cnpj" className="flex items-center gap-2">
+                    <FileText size={16} />
+                    CNPJ da Empresa
+                  </Label>
+                  <Input
+                    id="signup-cnpj"
+                    type="text"
+                    value={cnpj}
+                    onChange={(e) => setCnpj(e.target.value)}
+                    placeholder="00.000.000/0000-00"
+                    className="h-12"
+                    inputMode="numeric"
+                  />
+                  {errors.cnpj && <p className="text-sm text-destructive">{errors.cnpj}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="companyName" className="flex items-center gap-2">
+                    <Building2 size={16} />
+                    Razão Social
+                  </Label>
+                  <Input
+                    id="companyName"
+                    type="text"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="Nome da Empresa LTDA"
+                    className="h-12"
+                  />
+                  {errors.companyName && (
+                    <p className="text-sm text-destructive">{errors.companyName}</p>
+                  )}
+                </div>
+              </>
             )}
 
             <div className="space-y-2">
@@ -434,7 +353,7 @@ export default function Auth() {
 
             <Button
               type="submit"
-              disabled={isSubmitting || (mode === "signup" && !codeValidation?.valid)}
+              disabled={isSubmitting}
               className="w-full h-14 text-lg gap-2"
             >
               {isSubmitting ? (
@@ -453,11 +372,6 @@ export default function Auth() {
             </Button>
           </form>
 
-          {mode === "signup" && (
-            <p className="text-center text-sm text-muted-foreground mt-4">
-              Você precisa de um código de cadastro fornecido pelo administrador.
-            </p>
-          )}
         </div>
       </div>
     </div>

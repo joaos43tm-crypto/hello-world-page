@@ -35,20 +35,12 @@ Deno.serve(async (req) => {
     // Service client for privileged DB writes
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Determine if this is the first account in the store
-    const { count, error: countError } = await supabaseAdmin
-      .from('user_roles')
-      .select('id', { count: 'exact', head: true })
-
-    if (countError) throw countError
-
-    const role: 'admin' | 'atendente' = (count ?? 0) === 0 ? 'admin' : 'atendente'
-
-    // Ensure profile exists (upsert by user_id)
+    // Get user metadata for profile
     const meta = (user.user_metadata ?? {}) as Record<string, unknown>
     const companyName = (meta.company_name as string) || (meta.name as string) || null
     const cnpj = (meta.cnpj as string) || null
 
+    // Ensure profile exists (upsert by user_id)
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert(
@@ -64,6 +56,45 @@ Deno.serve(async (req) => {
       .single()
 
     if (profileError) throw profileError
+
+    // Determine if this is the first account for this company (same CNPJ)
+    // Count how many users with the same CNPJ already have roles
+    let isFirstUserForCompany = true
+
+    if (cnpj) {
+      // Get all user_ids that have the same CNPJ
+      const { data: sameCompanyProfiles, error: profilesError } = await supabaseAdmin
+        .from('profiles')
+        .select('user_id')
+        .eq('cnpj', cnpj)
+
+      if (profilesError) throw profilesError
+
+      if (sameCompanyProfiles && sameCompanyProfiles.length > 0) {
+        const userIds = sameCompanyProfiles.map((p) => p.user_id)
+
+        // Check if any of these users already have a role
+        const { count, error: countError } = await supabaseAdmin
+          .from('user_roles')
+          .select('id', { count: 'exact', head: true })
+          .in('user_id', userIds)
+
+        if (countError) throw countError
+
+        isFirstUserForCompany = (count ?? 0) === 0
+      }
+    } else {
+      // No CNPJ - fallback to global check (legacy behavior)
+      const { count, error: countError } = await supabaseAdmin
+        .from('user_roles')
+        .select('id', { count: 'exact', head: true })
+
+      if (countError) throw countError
+
+      isFirstUserForCompany = (count ?? 0) === 0
+    }
+
+    const role: 'admin' | 'atendente' = isFirstUserForCompany ? 'admin' : 'atendente'
 
     // Ensure a role exists for this user (avoid duplicates)
     const { data: existingRole, error: existingRoleError } = await supabaseAdmin
