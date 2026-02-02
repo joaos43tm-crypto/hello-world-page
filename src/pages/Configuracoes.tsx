@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -56,6 +57,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+import { getDefaultWhatsAppTemplates } from "@/lib/whatsappTemplates";
+
 
 interface StoreSettings {
   id: string;
@@ -74,6 +77,7 @@ interface StoreSettings {
   instagram?: string;
   facebook?: string;
   plans_enabled?: boolean;
+  whatsapp_templates?: Record<string, string> | null;
 }
 
 interface UserWithRole {
@@ -133,6 +137,12 @@ export default function Configuracoes() {
   const [storeEmail, setStoreEmail] = useState("");
   const [storeAddress, setStoreAddress] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
+  // WhatsApp message templates (per appointment status)
+  const waDefaults = getDefaultWhatsAppTemplates();
+  const [waMsgAgendado, setWaMsgAgendado] = useState(waDefaults.agendado);
+  const [waMsgEmAtendimento, setWaMsgEmAtendimento] = useState(waDefaults.em_atendimento);
+  const [waMsgAguardandoBusca, setWaMsgAguardandoBusca] = useState(waDefaults.aguardando_busca);
+  const [waMsgFinalizado, setWaMsgFinalizado] = useState(waDefaults.finalizado);
   const [instagram, setInstagram] = useState("");
   const [openingTime, setOpeningTime] = useState("08:00");
   const [closingTime, setClosingTime] = useState("18:00");
@@ -196,6 +206,13 @@ export default function Configuracoes() {
         setStoreEmail(data.email || "");
         setStoreAddress(data.address || "");
         setWhatsapp(data.whatsapp_number || "");
+
+        const tpl = (data.whatsapp_templates ?? {}) as Record<string, string>;
+        setWaMsgAgendado(tpl.agendado ?? waDefaults.agendado);
+        setWaMsgEmAtendimento(tpl.em_atendimento ?? waDefaults.em_atendimento);
+        setWaMsgAguardandoBusca(tpl.aguardando_busca ?? waDefaults.aguardando_busca);
+        setWaMsgFinalizado(tpl.finalizado ?? waDefaults.finalizado);
+
         setInstagram(data.instagram || "");
         setOpeningTime(data.opening_time || "08:00");
         setClosingTime(data.closing_time || "18:00");
@@ -235,6 +252,12 @@ export default function Configuracoes() {
           email: storeEmail || null,
           address: storeAddress || null,
           whatsapp_number: whatsapp || null,
+          whatsapp_templates: {
+            agendado: waMsgAgendado,
+            em_atendimento: waMsgEmAtendimento,
+            aguardando_busca: waMsgAguardandoBusca,
+            finalizado: waMsgFinalizado,
+          },
           instagram: instagram || null,
           opening_time: openingTime,
           closing_time: closingTime,
@@ -649,6 +672,55 @@ export default function Configuracoes() {
                         className="h-12"
                         disabled={!isAdmin}
                       />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-foreground">Mensagens do WhatsApp (por status)</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Use variáveis: <span className="font-mono">{'{tutor}'}</span>, <span className="font-mono">{'{pet}'}</span>, <span className="font-mono">{'{date}'}</span>, <span className="font-mono">{'{time}'}</span>, <span className="font-mono">{'{service}'}</span>.
+                    </p>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Agendado</Label>
+                        <Textarea
+                          value={waMsgAgendado}
+                          onChange={(e) => setWaMsgAgendado(e.target.value)}
+                          className="min-h-[120px]"
+                          disabled={!isAdmin}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Em atendimento</Label>
+                        <Textarea
+                          value={waMsgEmAtendimento}
+                          onChange={(e) => setWaMsgEmAtendimento(e.target.value)}
+                          className="min-h-[120px]"
+                          disabled={!isAdmin}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Aguardando busca</Label>
+                        <Textarea
+                          value={waMsgAguardandoBusca}
+                          onChange={(e) => setWaMsgAguardandoBusca(e.target.value)}
+                          className="min-h-[120px]"
+                          disabled={!isAdmin}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Finalizado</Label>
+                        <Textarea
+                          value={waMsgFinalizado}
+                          onChange={(e) => setWaMsgFinalizado(e.target.value)}
+                          className="min-h-[120px]"
+                          disabled={!isAdmin}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
