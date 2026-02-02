@@ -65,7 +65,8 @@ type ReceiptPreviewPayload = {
 
 const paymentMethods = [
   { id: "dinheiro", label: "Dinheiro" },
-  { id: "cartao", label: "Cartão" },
+  { id: "cartao_credito", label: "Cartão Crédito" },
+  { id: "cartao_debito", label: "Cartão Débito" },
   { id: "pix", label: "Pix" },
 ];
 
