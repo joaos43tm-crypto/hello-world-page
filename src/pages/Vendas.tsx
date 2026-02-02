@@ -23,9 +23,6 @@ import {
   Plus,
   Minus,
   Trash2,
-  CreditCard,
-  Banknote,
-  QrCode,
   CheckCircle2,
   Wallet,
   ArrowDownCircle,
@@ -38,14 +35,11 @@ import {
   appointmentsApi,
   productsApi,
   salesApi,
-  tutorsApi,
   type CashRegisterSession,
   type Appointment,
   type Product,
-  type Tutor,
 } from "@/lib/petcontrol.api";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { generateCashClosingPdf } from "@/lib/pdv/cashClosingPdf";
 import { generateSaleReceiptPdf } from "@/lib/pdv/saleReceiptPdf";
@@ -63,10 +57,19 @@ interface CartItem {
 }
 
 const paymentMethods = [
-  { id: "dinheiro", label: "Dinheiro", icon: Banknote },
-  { id: "cartao", label: "Cartão", icon: CreditCard },
-  { id: "pix", label: "Pix", icon: QrCode },
+  { id: "dinheiro", label: "Dinheiro" },
+  { id: "cartao", label: "Cartão" },
+  { id: "pix", label: "Pix" },
 ];
+
+function formatMoneyBRL(value: number) {
+  return value.toFixed(2).replace(".", ",");
+}
+
+function formatPaymentSummary(methodId: string, amount: number) {
+  const label = paymentMethods.find((m) => m.id === methodId)?.label ?? methodId;
+  return `${label} R$ ${formatMoneyBRL(amount)}`;
+}
 
 function isSameLocalDay(iso: string, ref = new Date()) {
   const d = new Date(iso);
@@ -86,11 +89,15 @@ function parseMoneyInput(raw: string) {
 export default function Vendas() {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
-  const [tutors, setTutors] = useState<Tutor[]>([]);
   const [finalizedAppointments, setFinalizedAppointments] = useState<Appointment[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [selectedTutor, setSelectedTutor] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("dinheiro");
+
+  // Pagamento (dividido em 2 formas)
+  const [payment1Method, setPayment1Method] = useState("dinheiro");
+  const [payment1AmountText, setPayment1AmountText] = useState("0,00");
+  const [payment2Method, setPayment2Method] = useState("pix");
+  const [payment2AmountText, setPayment2AmountText] = useState("0,00");
+
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -119,6 +126,47 @@ export default function Vendas() {
     [cart]
   );
 
+  // Inicializa o split quando o carrinho começa (sem sobrescrever edição do usuário)
+  useEffect(() => {
+    if (cart.length === 0) {
+      setPayment1Method("dinheiro");
+      setPayment2Method("pix");
+      setPayment1AmountText("0,00");
+      setPayment2AmountText("0,00");
+      return;
+    }
+
+    // Se ambos estiverem zerados, preenche tudo no método 1
+    const a1 = parseMoneyInput(payment1AmountText);
+    const a2 = parseMoneyInput(payment2AmountText);
+    if (a1 === 0 && a2 === 0 && total > 0) {
+      setPayment1AmountText(formatMoneyBRL(total));
+      setPayment2AmountText("0,00");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart.length, total]);
+
+  const payment1Amount = useMemo(() => parseMoneyInput(payment1AmountText), [payment1AmountText]);
+  const payment2Amount = useMemo(() => parseMoneyInput(payment2AmountText), [payment2AmountText]);
+
+  const paymentSplitError = useMemo(() => {
+    if (cart.length === 0) return null;
+    if (payment1Method === payment2Method) return "Escolha 2 formas de pagamento diferentes.";
+    if (payment1Amount < 0 || payment2Amount < 0) return "Valores de pagamento não podem ser negativos.";
+
+    // Comparação com tolerância para arredondamento
+    const diff = Math.abs((payment1Amount + payment2Amount) - total);
+    if (diff > 0.009) return "A soma das 2 formas precisa bater exatamente o total.";
+    return null;
+  }, [cart.length, payment1Amount, payment1Method, payment2Amount, payment2Method, total]);
+
+  const paymentMethodSummary = useMemo(() => {
+    return `${formatPaymentSummary(payment1Method, payment1Amount)} + ${formatPaymentSummary(
+      payment2Method,
+      payment2Amount
+    )}`;
+  }, [payment1Amount, payment1Method, payment2Amount, payment2Method]);
+
   const canSell = useMemo(() => {
     if (!cashSession) return false;
     return isSameLocalDay(cashSession.opened_at);
@@ -127,13 +175,11 @@ export default function Vendas() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [productsData, tutorsData, finalized] = await Promise.all([
+        const [productsData, finalized] = await Promise.all([
           productsApi.getActive(),
-          tutorsApi.getAll(),
           appointmentsApi.getByStatus("finalizado"),
         ]);
         setProducts(productsData);
-        setTutors(tutorsData);
         setFinalizedAppointments(finalized);
       } catch (error) {
         console.error("Error loading data:", error);
@@ -346,7 +392,6 @@ export default function Vendas() {
       setCloseCashDialog(false);
       setCashSession(null);
       setCart([]);
-      setSelectedTutor("");
 
       toast({
         title: "Caixa fechado",
@@ -394,6 +439,15 @@ export default function Vendas() {
   const handleFinalizeSale = async () => {
     if (cart.length === 0) return;
 
+    if (paymentSplitError) {
+      toast({
+        title: "Pagamento inválido",
+        description: paymentSplitError,
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!cashSession) {
       toast({ title: "Abra o caixa antes de vender", variant: "destructive" });
       return;
@@ -414,9 +468,9 @@ export default function Vendas() {
     try {
       const created = await salesApi.create(
         {
-          tutor_id: selectedTutor || null,
+          tutor_id: null,
           total_amount: total,
-          payment_method: paymentMethod,
+          payment_method: paymentMethodSummary,
           cash_session_id: cashSession.id,
         },
         cart.map((item) => ({
@@ -448,10 +502,8 @@ export default function Vendas() {
           sale: {
             id: created.id,
             createdAt: created.created_at || new Date().toISOString(),
-            paymentMethod,
-            customerName:
-              tutors.find((t) => t.id === selectedTutor)?.name ||
-              (selectedTutor ? "Cliente" : null),
+            paymentMethod: paymentMethodSummary,
+            customerName: null,
           },
           items: cart.map((c) => ({
             name: c.name,
@@ -468,7 +520,6 @@ export default function Vendas() {
       setTimeout(() => {
         setShowSuccess(false);
         setCart([]);
-        setSelectedTutor("");
       }, 2000);
 
       toast({
@@ -752,46 +803,70 @@ export default function Vendas() {
 
             {cart.length > 0 && (
               <>
-                {/* Client */}
-                <div className="space-y-2 mb-4">
-                  <Label>Cliente (opcional)</Label>
-                  <Select value={selectedTutor} onValueChange={setSelectedTutor}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecionar cliente..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tutors.map((tutor) => (
-                        <SelectItem key={tutor.id} value={tutor.id}>
-                          {tutor.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Payment Split */}
+                <div className="space-y-3 mb-4">
+                  <Label>Formas de Pagamento (2)</Label>
 
-                {/* Payment Method */}
-                <div className="space-y-2 mb-4">
-                  <Label>Forma de Pagamento</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {paymentMethods.map((method) => {
-                      const Icon = method.icon;
-                      return (
-                        <button
-                          key={method.id}
-                          onClick={() => setPaymentMethod(method.id)}
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="grid grid-cols-5 gap-2 items-end">
+                      <div className="col-span-3">
+                        <Label className="text-xs text-muted-foreground">Forma 1</Label>
+                        <Select value={payment1Method} onValueChange={setPayment1Method}>
+                          <SelectTrigger disabled={!canSell}>
+                            <SelectValue placeholder="Selecionar..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paymentMethods.map((m) => (
+                              <SelectItem key={m.id} value={m.id}>
+                                {m.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="col-span-2">
+                        <Label className="text-xs text-muted-foreground">Valor</Label>
+                        <Input
+                          value={payment1AmountText}
+                          onChange={(e) => setPayment1AmountText(e.target.value)}
+                          placeholder="0,00"
                           disabled={!canSell}
-                          className={cn(
-                            "p-3 rounded-xl text-center transition-colors flex flex-col items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed",
-                            paymentMethod === method.id
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground hover:bg-accent"
-                          )}
-                        >
-                          <Icon size={20} />
-                          <span className="text-xs font-medium">{method.label}</span>
-                        </button>
-                      );
-                    })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-5 gap-2 items-end">
+                      <div className="col-span-3">
+                        <Label className="text-xs text-muted-foreground">Forma 2</Label>
+                        <Select value={payment2Method} onValueChange={setPayment2Method}>
+                          <SelectTrigger disabled={!canSell}>
+                            <SelectValue placeholder="Selecionar..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paymentMethods.map((m) => (
+                              <SelectItem key={m.id} value={m.id}>
+                                {m.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="col-span-2">
+                        <Label className="text-xs text-muted-foreground">Valor</Label>
+                        <Input
+                          value={payment2AmountText}
+                          onChange={(e) => setPayment2AmountText(e.target.value)}
+                          placeholder="0,00"
+                          disabled={!canSell}
+                        />
+                      </div>
+                    </div>
+
+                    {paymentSplitError && (
+                      <p className="text-sm text-destructive">{paymentSplitError}</p>
+                    )}
                   </div>
                 </div>
 
@@ -806,7 +881,7 @@ export default function Vendas() {
 
                   <Button
                     onClick={handleFinalizeSale}
-                    disabled={isProcessing || !canSell}
+                    disabled={isProcessing || !canSell || !!paymentSplitError}
                     className="w-full h-14 text-lg gap-2"
                   >
                     <CheckCircle2 size={20} />
