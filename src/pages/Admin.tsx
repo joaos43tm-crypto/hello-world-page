@@ -9,6 +9,7 @@ import {
   Key,
   Plus,
   Shield,
+  Database,
   Trash2,
   XCircle,
   CheckCircle2,
@@ -33,6 +34,16 @@ type AdminCodesAction =
   | { action: "list" }
   | { action: "create"; code: string; cnpj: string; company_name: string }
   | { action: "delete"; code: string };
+
+type SeedResponse = {
+  success: boolean;
+  tutor?: { id: string; name: string };
+  pet?: { id: string; name: string };
+  service?: { id: string; name: string };
+  professional?: { id: string; name: string };
+  appointment?: { id: string; scheduled_date: string; scheduled_time: string };
+  error?: string;
+};
 
 export default function Admin() {
   const { toast } = useToast();
@@ -132,6 +143,28 @@ export default function Admin() {
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
     toast({ title: "Copiado!" });
+  };
+
+  const handleSeedData = async () => {
+    setIsBusy(true);
+    try {
+      const res = await supabase.functions.invoke<SeedResponse>("seed-test-data", { body: {} });
+      if (res.error) throw new Error(res.error.message);
+      if (!res.data?.success) throw new Error(res.data?.error || "Falha ao criar dados de teste");
+
+      toast({
+        title: "Dados de teste criados!",
+        description: `Cliente: ${res.data.tutor?.name} • Pet: ${res.data.pet?.name} • Agendamento: ${res.data.appointment?.scheduled_date} ${res.data.appointment?.scheduled_time}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao criar dados seed",
+        description: error?.message ?? "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsBusy(false);
+    }
   };
 
   if (isLoading) {
@@ -246,6 +279,26 @@ export default function Admin() {
                 Atualizar lista
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Seed data */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database size={20} />
+              Dados de teste (seed)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Cria automaticamente um cliente/tutor, um pet, um serviço, um profissional e um agendamento
+              para facilitar testes repetíveis (ambiente de Teste).
+            </p>
+            <Button onClick={() => void handleSeedData()} disabled={isBusy} className="gap-2">
+              <Database size={16} />
+              Criar dados de teste
+            </Button>
           </CardContent>
         </Card>
 
