@@ -1,4 +1,3 @@
-import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { 
@@ -11,6 +10,11 @@ import {
 } from "lucide-react";
 import type { Appointment, AppointmentStatus } from "@/lib/petcontrol.api";
 import { whatsappApi } from "@/lib/petcontrol.api";
+import {
+  applyWhatsAppTemplate,
+  getDefaultWhatsAppTemplates,
+  getWhatsAppTemplatesCached,
+} from "@/lib/whatsappTemplates";
 
 interface AppointmentCardProps {
   appointment: Appointment;
@@ -41,14 +45,28 @@ export function AppointmentCard({ appointment, onStatusChange, onWhatsApp }: App
 
   const handleWhatsApp = () => {
     if (!tutor?.phone) return;
-    
-    const message = whatsappApi.generateMessage(
-      'ready',
-      pet?.name,
-      tutor?.name
-    );
-    whatsappApi.openWhatsApp(tutor.phone, message);
-    onWhatsApp?.(appointment);
+
+    (async () => {
+      const defaults = getDefaultWhatsAppTemplates();
+      const templates = await getWhatsAppTemplatesCached();
+      const template = templates[status] || defaults[status];
+
+      const datePt = appointment.scheduled_date
+        ? new Date(`${appointment.scheduled_date}T12:00:00`).toLocaleDateString("pt-BR")
+        : "";
+      const time = appointment.scheduled_time?.slice(0, 5) ?? "";
+
+      const message = applyWhatsAppTemplate(template, {
+        tutorName: tutor?.name,
+        petName: pet?.name,
+        date: datePt,
+        time,
+        serviceName: service?.name,
+      });
+
+      whatsappApi.openWhatsApp(tutor.phone, message);
+      onWhatsApp?.(appointment);
+    })();
   };
 
   return (
@@ -99,7 +117,7 @@ export function AppointmentCard({ appointment, onStatusChange, onWhatsApp }: App
 
       {/* Actions */}
       <div className="flex gap-2">
-        {status === "aguardando_busca" && tutor?.phone && (
+        {tutor?.phone && (
           <Button
             variant="outline"
             size="sm"
