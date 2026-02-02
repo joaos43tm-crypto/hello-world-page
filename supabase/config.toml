@@ -1,8 +1,1 @@
-project_id = "skbejxbpuymetaffroso"
-
-[functions.bootstrap-user]
-verify_jwt = false
-
-[functions.create-user]
-verify_jwt = false
-
+project_id = "edgxhgevaduxnxtfyyfq"
