@@ -58,7 +58,7 @@ export function MonthlyAppointmentsCalendar({
   }, [monthDate]);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[420px,1fr]">
+    <div className="grid gap-4 lg:grid-cols-[520px,1fr]">
       {/* Calendar */}
       <div className="pet-card">
         <div className="flex items-center justify-between mb-2">
@@ -135,7 +135,7 @@ export function MonthlyAppointmentsCalendar({
         </div>
 
         {isLoading ? (
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="rounded-2xl border bg-background p-4 animate-pulse">
                 <div className="h-4 bg-muted rounded w-1/2 mb-3" />
@@ -146,7 +146,7 @@ export function MonthlyAppointmentsCalendar({
           </div>
         ) : selectedAppointments.length > 0 ? (
           <div className="rounded-2xl border bg-background">
-            <div className="divide-y">
+            <div className="divide-y max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
               {selectedAppointments.map((appointment) => (
                 <div key={appointment.id} className="px-4">
                   <AppointmentListRow appointment={appointment} />
