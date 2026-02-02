@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       appointments: {
         Row: {
+          cnpj: string | null
           created_at: string | null
           id: string
           notes: string | null
@@ -30,6 +31,7 @@ export type Database = {
           whatsapp_sent: boolean | null
         }
         Insert: {
+          cnpj?: string | null
           created_at?: string | null
           id?: string
           notes?: string | null
@@ -44,6 +46,7 @@ export type Database = {
           whatsapp_sent?: boolean | null
         }
         Update: {
+          cnpj?: string | null
           created_at?: string | null
           id?: string
           notes?: string | null
@@ -227,6 +230,7 @@ export type Database = {
       medical_consultations: {
         Row: {
           appointment_id: string | null
+          cnpj: string | null
           created_at: string
           created_by: string
           ended_at: string | null
@@ -239,6 +243,7 @@ export type Database = {
         }
         Insert: {
           appointment_id?: string | null
+          cnpj?: string | null
           created_at?: string
           created_by: string
           ended_at?: string | null
@@ -251,6 +256,7 @@ export type Database = {
         }
         Update: {
           appointment_id?: string | null
+          cnpj?: string | null
           created_at?: string
           created_by?: string
           ended_at?: string | null
@@ -344,6 +350,7 @@ export type Database = {
           allergies: string | null
           birth_date: string | null
           breed: string | null
+          cnpj: string | null
           created_at: string | null
           id: string
           is_aggressive: boolean | null
@@ -360,6 +367,7 @@ export type Database = {
           allergies?: string | null
           birth_date?: string | null
           breed?: string | null
+          cnpj?: string | null
           created_at?: string | null
           id?: string
           is_aggressive?: boolean | null
@@ -376,6 +384,7 @@ export type Database = {
           allergies?: string | null
           birth_date?: string | null
           breed?: string | null
+          cnpj?: string | null
           created_at?: string | null
           id?: string
           is_aggressive?: boolean | null
@@ -568,6 +577,7 @@ export type Database = {
       }
       sale_items: {
         Row: {
+          cnpj: string | null
           created_at: string | null
           id: string
           product_id: string | null
@@ -578,6 +588,7 @@ export type Database = {
           unit_price: number
         }
         Insert: {
+          cnpj?: string | null
           created_at?: string | null
           id?: string
           product_id?: string | null
@@ -588,6 +599,7 @@ export type Database = {
           unit_price: number
         }
         Update: {
+          cnpj?: string | null
           created_at?: string | null
           id?: string
           product_id?: string | null
@@ -624,6 +636,7 @@ export type Database = {
       sales: {
         Row: {
           cash_session_id: string | null
+          cnpj: string | null
           created_at: string | null
           id: string
           notes: string | null
@@ -633,6 +646,7 @@ export type Database = {
         }
         Insert: {
           cash_session_id?: string | null
+          cnpj?: string | null
           created_at?: string | null
           id?: string
           notes?: string | null
@@ -642,6 +656,7 @@ export type Database = {
         }
         Update: {
           cash_session_id?: string | null
+          cnpj?: string | null
           created_at?: string | null
           id?: string
           notes?: string | null
@@ -762,6 +777,7 @@ export type Database = {
       tutors: {
         Row: {
           address: string | null
+          cnpj: string | null
           created_at: string | null
           email: string | null
           id: string
@@ -772,6 +788,7 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          cnpj?: string | null
           created_at?: string | null
           email?: string | null
           id?: string
@@ -782,6 +799,7 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          cnpj?: string | null
           created_at?: string | null
           email?: string | null
           id?: string
