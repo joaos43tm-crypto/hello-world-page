@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Calendar as DayPickerCalendar } from "@/components/ui/calendar";
-import { AppointmentCard } from "@/components/dashboard/AppointmentCard";
+import { AppointmentListRow } from "@/components/dashboard/AppointmentListRow";
 import type { Appointment, AppointmentStatus } from "@/lib/petcontrol.api";
 import { isoDateInTimeZone } from "@/lib/date";
 
@@ -8,6 +8,7 @@ type Props = {
   monthDate: Date; // qualquer dia dentro do mês desejado
   appointments: Appointment[];
   isLoading?: boolean;
+  // Mantido por compatibilidade com o Dashboard (visualização apenas)
   onStatusChange?: (id: string, status: AppointmentStatus) => void;
   onWhatsApp?: (appointment: Appointment) => void;
 };
@@ -24,14 +25,10 @@ export function MonthlyAppointmentsCalendar({
   monthDate,
   appointments,
   isLoading,
-  onStatusChange,
-  onWhatsApp,
 }: Props) {
   const [selectedDate, setSelectedDate] = useState<string>(isoDateInTimeZone());
 
   const monthStart = useMemo(() => startOfMonth(monthDate), [monthDate]);
-  const monthEnd = useMemo(() => endOfMonth(monthDate), [monthDate]);
-
   const countsByDate = useMemo(() => {
     const map = new Map<string, number>();
     for (const a of appointments) {
@@ -138,25 +135,24 @@ export function MonthlyAppointmentsCalendar({
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="pet-card animate-pulse">
-                <div className="h-16 bg-muted rounded-lg mb-3" />
-                <div className="h-4 bg-muted rounded w-3/4 mb-2" />
-                <div className="h-4 bg-muted rounded w-1/2" />
+          <div className="space-y-3">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="rounded-2xl border bg-background p-4 animate-pulse">
+                <div className="h-4 bg-muted rounded w-1/2 mb-3" />
+                <div className="h-3 bg-muted rounded w-3/4 mb-2" />
+                <div className="h-3 bg-muted rounded w-2/3" />
               </div>
             ))}
           </div>
         ) : selectedAppointments.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {selectedAppointments.map((appointment) => (
-              <AppointmentCard
-                key={appointment.id}
-                appointment={appointment}
-                onStatusChange={onStatusChange}
-                onWhatsApp={onWhatsApp}
-              />
-            ))}
+          <div className="rounded-2xl border bg-background">
+            <div className="divide-y">
+              {selectedAppointments.map((appointment) => (
+                <div key={appointment.id} className="px-4">
+                  <AppointmentListRow appointment={appointment} />
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="text-center py-10">
