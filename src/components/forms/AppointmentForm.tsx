@@ -10,16 +10,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar, Clock, Save, Dog, Scissors, User } from "lucide-react";
-import type { Pet, Service, Professional } from "@/lib/petcontrol.api";
-import { petsApi, servicesApi, professionalsApi } from "@/lib/petcontrol.api";
+import { Calendar, Clock, Save, Dog, Scissors } from "lucide-react";
+import type { Pet, Service } from "@/lib/petcontrol.api";
+import { petsApi, servicesApi } from "@/lib/petcontrol.api";
 import { isoDateInTimeZone } from "@/lib/date";
 
 interface AppointmentFormProps {
   onSave: (data: {
     pet_id: string;
     service_id: string;
-    professional_id?: string;
     scheduled_date: string;
     scheduled_time: string;
     notes?: string;
@@ -40,12 +39,10 @@ export function AppointmentForm({
 }: AppointmentFormProps) {
   const [pets, setPets] = useState<Pet[]>([]);
   const [services, setServices] = useState<Service[]>([]);
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const [petId, setPetId] = useState(defaultPetId || "");
   const [serviceId, setServiceId] = useState(defaultServiceId || "");
-  const [professionalId, setProfessionalId] = useState("");
   const [date, setDate] = useState(defaultDate || isoDateInTimeZone());
   const [time, setTime] = useState("09:00");
   const [notes, setNotes] = useState("");
@@ -54,14 +51,12 @@ export function AppointmentForm({
 
   useEffect(() => {
     const loadData = async () => {
-      const [petsData, servicesData, professionalsData] = await Promise.all([
+      const [petsData, servicesData] = await Promise.all([
         petsApi.getAll(),
         servicesApi.getActive(),
-        professionalsApi.getActive(),
       ]);
       setPets(petsData);
       setServices(servicesData);
-      setProfessionals(professionalsData);
     };
     loadData();
   }, []);
@@ -74,7 +69,6 @@ export function AppointmentForm({
       await onSave({
         pet_id: petId,
         service_id: serviceId,
-        professional_id: professionalId || undefined,
         scheduled_date: date,
         scheduled_time: time,
         notes: notes || undefined,
@@ -143,26 +137,6 @@ export function AppointmentForm({
           </Select>
         </div>
       )}
-
-      {/* Professional Selection */}
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          <User size={16} />
-          Profissional
-        </Label>
-        <Select value={professionalId} onValueChange={setProfessionalId}>
-          <SelectTrigger className="h-12">
-            <SelectValue placeholder="Selecione (opcional)..." />
-          </SelectTrigger>
-          <SelectContent>
-            {professionals.map((pro) => (
-              <SelectItem key={pro.id} value={pro.id}>
-                {pro.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
 
       {/* Date and Time */}
       <div className="grid grid-cols-2 gap-4">
