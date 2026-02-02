@@ -64,7 +64,45 @@ Deno.serve(async (req) => {
       supabaseAuthed.from("products").select("id, price").limit(50),
     ]);
 
-    const service = pick((services ?? []).map((s) => s.id as string).filter(Boolean));
+    let servicesCreated = 0;
+    let service = pick((services ?? []).map((s) => s.id as string).filter(Boolean));
+
+    // If there are no services yet, create a few demo ones
+    if (!service) {
+      const demoServices = [
+        {
+          name: "Banho",
+          description: "Banho completo com produtos de qualidade.",
+          price: 60,
+          duration_minutes: 60,
+          is_active: true,
+        },
+        {
+          name: "Tosa",
+          description: "Tosa higiênica e estética.",
+          price: 80,
+          duration_minutes: 60,
+          is_active: true,
+        },
+        {
+          name: "Banho + Tosa",
+          description: "Pacote banho e tosa.",
+          price: 120,
+          duration_minutes: 90,
+          is_active: true,
+        },
+      ];
+
+      const { data: insertedServices, error: insertServiceError } = await supabaseAuthed
+        .from("services")
+        .insert(demoServices)
+        .select("id");
+      if (insertServiceError) throw insertServiceError;
+
+      servicesCreated = (insertedServices ?? []).length;
+      service = pick((insertedServices ?? []).map((s) => s.id as string).filter(Boolean));
+    }
+
     const product = pick((products ?? []).map((p) => p as { id: string; price: number }));
 
     // 1) Tutors
@@ -163,13 +201,14 @@ Deno.serve(async (req) => {
       success: true,
       cnpj,
       created: {
+        services: servicesCreated,
         tutors: (tutors ?? []).length,
         pets: (pets ?? []).length,
         appointments: appointmentsCreated,
         sales: salesCreated,
       },
       notes: {
-        appointments: service ? "OK" : "Nenhum serviço cadastrado; agendamentos não foram criados.",
+        appointments: service ? "OK" : "Nenhum serviço disponível; agendamentos não foram criados.",
         sales: product ? "OK" : "Nenhum produto cadastrado; vendas não foram criadas.",
       },
     });
