@@ -143,6 +143,7 @@ export default function Configuracoes() {
   const [waMsgEmAtendimento, setWaMsgEmAtendimento] = useState(waDefaults.em_atendimento);
   const [waMsgAguardandoBusca, setWaMsgAguardandoBusca] = useState(waDefaults.aguardando_busca);
   const [waMsgFinalizado, setWaMsgFinalizado] = useState(waDefaults.finalizado);
+  const [waMsgPago, setWaMsgPago] = useState(waDefaults.pago);
   const [instagram, setInstagram] = useState("");
   const [openingTime, setOpeningTime] = useState("08:00");
   const [closingTime, setClosingTime] = useState("18:00");
@@ -212,6 +213,7 @@ export default function Configuracoes() {
         setWaMsgEmAtendimento(tpl.em_atendimento ?? waDefaults.em_atendimento);
         setWaMsgAguardandoBusca(tpl.aguardando_busca ?? waDefaults.aguardando_busca);
         setWaMsgFinalizado(tpl.finalizado ?? waDefaults.finalizado);
+        setWaMsgPago(tpl.pago ?? waDefaults.pago);
 
         setInstagram(data.instagram || "");
         setOpeningTime(data.opening_time || "08:00");
@@ -257,6 +259,7 @@ export default function Configuracoes() {
             em_atendimento: waMsgEmAtendimento,
             aguardando_busca: waMsgAguardandoBusca,
             finalizado: waMsgFinalizado,
+            pago: waMsgPago,
           },
           instagram: instagram || null,
           opening_time: openingTime,
@@ -717,6 +720,16 @@ export default function Configuracoes() {
                         <Textarea
                           value={waMsgFinalizado}
                           onChange={(e) => setWaMsgFinalizado(e.target.value)}
+                          className="min-h-[120px]"
+                          disabled={!isAdmin}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Pago</Label>
+                        <Textarea
+                          value={waMsgPago}
+                          onChange={(e) => setWaMsgPago(e.target.value)}
                           className="min-h-[120px]"
                           disabled={!isAdmin}
                         />

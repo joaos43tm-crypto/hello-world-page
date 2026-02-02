@@ -17,7 +17,7 @@ function sanitizeIlikeQuery(raw: string) {
 // TYPES
 // ============================================
 
-export type AppointmentStatus = 'agendado' | 'em_atendimento' | 'aguardando_busca' | 'finalizado';
+export type AppointmentStatus = 'agendado' | 'em_atendimento' | 'aguardando_busca' | 'finalizado' | 'pago';
 export type PetSize = 'pequeno' | 'medio' | 'grande';
 export type PetTemperament = 'docil' | 'agitado' | 'agressivo' | 'timido';
 

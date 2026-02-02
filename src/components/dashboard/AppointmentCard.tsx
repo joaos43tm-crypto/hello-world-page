@@ -27,6 +27,7 @@ const nextStatus: Record<AppointmentStatus, AppointmentStatus | null> = {
   em_atendimento: "aguardando_busca",
   aguardando_busca: "finalizado",
   finalizado: null,
+  pago: null,
 };
 
 const actionLabels: Record<AppointmentStatus, string> = {
@@ -34,6 +35,7 @@ const actionLabels: Record<AppointmentStatus, string> = {
   em_atendimento: "Finalizar Banho",
   aguardando_busca: "Marcar como Entregue",
   finalizado: "Concluído",
+  pago: "Pago",
 };
 
 export function AppointmentCard({ appointment, onStatusChange, onWhatsApp }: AppointmentCardProps) {

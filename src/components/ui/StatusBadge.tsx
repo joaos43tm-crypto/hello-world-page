@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Clock, Sparkles, Bell, CheckCircle2 } from "lucide-react";
+import { Clock, Sparkles, Bell, CheckCircle2, CreditCard } from "lucide-react";
 import type { AppointmentStatus } from "@/lib/petcontrol.api";
 
 interface StatusBadgeProps {
@@ -16,22 +16,27 @@ const statusConfig: Record<AppointmentStatus, {
   agendado: {
     label: "Agendado",
     icon: Clock,
-    className: "bg-yellow-100 text-yellow-800 border-yellow-300",
+    className: "bg-muted text-foreground border-border",
   },
   em_atendimento: {
     label: "Em Atendimento",
     icon: Sparkles,
-    className: "bg-blue-100 text-blue-800 border-blue-300",
+    className: "bg-accent text-accent-foreground border-border",
   },
   aguardando_busca: {
     label: "Aguardando Busca",
     icon: Bell,
-    className: "bg-orange-100 text-orange-800 border-orange-300",
+    className: "bg-secondary text-secondary-foreground border-border",
   },
   finalizado: {
     label: "Finalizado",
     icon: CheckCircle2,
-    className: "bg-green-100 text-green-800 border-green-300",
+    className: "bg-primary text-primary-foreground border-primary/20",
+  },
+  pago: {
+    label: "Pago",
+    icon: CreditCard,
+    className: "bg-primary/10 text-foreground border-primary/20",
   },
 };
 

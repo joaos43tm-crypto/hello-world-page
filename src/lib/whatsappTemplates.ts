@@ -15,6 +15,8 @@ export function getDefaultWhatsAppTemplates(): Required<Record<AppointmentStatus
       "Olá{tutor}! 🐾✂️\n\nSeu pet{pet} está pronto e aguardando busca.\n\nPode vir quando puder! 💚",
     finalizado:
       "Olá{tutor}! 🐾\n\nAtendimento{pet} finalizado. Obrigado pela confiança! ⭐\n\nSe puder, nos envie um feedback. 💚",
+    pago:
+      "Olá{tutor}! 🐾\n\nPagamento do atendimento{pet} confirmado. Obrigado! 💳✅\n\nVolte sempre! 💚",
   };
 }
 
