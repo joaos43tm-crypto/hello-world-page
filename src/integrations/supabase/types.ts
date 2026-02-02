@@ -947,6 +947,7 @@ export type Database = {
         | "em_atendimento"
         | "aguardando_busca"
         | "finalizado"
+        | "pago"
       cash_movement_type: "sangria" | "suprimento"
       pet_size: "pequeno" | "medio" | "grande"
       pet_temperament: "docil" | "agitado" | "agressivo" | "timido"
@@ -1083,6 +1084,7 @@ export const Constants = {
         "em_atendimento",
         "aguardando_busca",
         "finalizado",
+        "pago",
       ],
       cash_movement_type: ["sangria", "suprimento"],
       pet_size: ["pequeno", "medio", "grande"],
