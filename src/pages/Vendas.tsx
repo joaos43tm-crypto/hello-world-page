@@ -56,6 +56,13 @@ interface CartItem {
   appointmentId?: string;
 }
 
+type ReceiptPreviewPayload = {
+  createdAt: string;
+  paymentMethod: string;
+  items: Array<{ name: string; quantity: number; unitPrice: number; subtotal: number }>;
+  total: number;
+};
+
 const paymentMethods = [
   { id: "dinheiro", label: "Dinheiro" },
   { id: "cartao", label: "Cartão" },
@@ -102,6 +109,7 @@ export default function Vendas() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
+  const [lastReceipt, setLastReceipt] = useState<ReceiptPreviewPayload | null>(null);
 
   // Caixa
   const [cashSession, setCashSession] = useState<CashRegisterSession | null>(null);
@@ -203,6 +211,31 @@ export default function Vendas() {
       toast({
         title: "Erro ao gerar recibo",
         description: "Não foi possível gerar/imprimir o recibo agora.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleReprintLastReceipt = async () => {
+    if (!lastReceipt) return;
+    try {
+      const receiptBytes = await generateSaleReceiptPdf({
+        storeName,
+        sale: {
+          id: "REPRINT",
+          createdAt: lastReceipt.createdAt,
+          paymentMethod: lastReceipt.paymentMethod,
+          customerName: null,
+        },
+        items: lastReceipt.items,
+        total: lastReceipt.total,
+      });
+      await openAndPrintPdfBytes(receiptBytes);
+    } catch (e) {
+      console.error("Error reprinting receipt:", e);
+      toast({
+        title: "Erro ao imprimir recibo",
+        description: "Não foi possível reimprimir o recibo agora.",
         variant: "destructive",
       });
     }
@@ -507,6 +540,18 @@ export default function Vendas() {
 
     setIsProcessing(true);
     try {
+      const receiptPayload: ReceiptPreviewPayload = {
+        createdAt: new Date().toISOString(),
+        paymentMethod: paymentMethodSummary,
+        items: cart.map((c) => ({
+          name: c.name,
+          quantity: c.quantity,
+          unitPrice: c.price,
+          subtotal: c.price * c.quantity,
+        })),
+        total,
+      };
+
       const created = await salesApi.create(
         {
           tutor_id: null,
@@ -542,20 +587,21 @@ export default function Vendas() {
           storeName,
           sale: {
             id: created.id,
-            createdAt: created.created_at || new Date().toISOString(),
-            paymentMethod: paymentMethodSummary,
+            createdAt: created.created_at || receiptPayload.createdAt,
+            paymentMethod: receiptPayload.paymentMethod,
             customerName: null,
           },
-          items: cart.map((c) => ({
-            name: c.name,
-            quantity: c.quantity,
-            unitPrice: c.price,
-            subtotal: c.price * c.quantity,
-          })),
-          total,
+          items: receiptPayload.items,
+          total: receiptPayload.total,
         });
         await openAndPrintPdfBytes(receiptBytes);
       }
+
+      // Guarda a última venda para reimpressão rápida (tela de sucesso)
+      setLastReceipt({
+        ...receiptPayload,
+        createdAt: created.created_at || receiptPayload.createdAt,
+      });
 
       setShowSuccess(true);
       setTimeout(() => {
@@ -592,6 +638,20 @@ export default function Vendas() {
             <p className="text-muted-foreground text-lg">
               R$ {total.toFixed(2)}
             </p>
+
+            <div className="mt-6 flex flex-col gap-2">
+              <Button
+                type="button"
+                onClick={handleReprintLastReceipt}
+                disabled={!lastReceipt}
+                className="mx-auto"
+              >
+                Imprimir recibo da venda
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                A impressão abre o diálogo do navegador.
+              </p>
+            </div>
           </div>
         </div>
       </MainLayout>
