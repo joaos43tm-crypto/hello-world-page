@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
-type AppRole = "admin" | "atendente" | "tosador" | "medico";
+type AppRole = "administrador" | "atendente" | "tosador" | "medico";
 
 type NavItem = {
   path: string;
@@ -20,12 +20,12 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { path: "/", label: "Início", icon: LayoutDashboard, allow: ["admin", "atendente", "tosador", "medico"] },
-  { path: "/agenda", label: "Agenda", icon: Calendar, allow: ["admin", "atendente", "tosador", "medico"] },
-  { path: "/consulta-medica", label: "Consulta", icon: Stethoscope, allow: ["admin", "atendente", "medico"] },
-  { path: "/clientes", label: "Clientes", icon: Dog, allow: ["admin", "atendente"] },
-  { path: "/vendas", label: "PDV", icon: ShoppingCart, allow: ["admin", "atendente"] },
-  { path: "/configuracoes", label: "Config", icon: Settings, allow: ["admin"] },
+  { path: "/", label: "Início", icon: LayoutDashboard, allow: ["administrador", "atendente", "tosador", "medico"] },
+  { path: "/agenda", label: "Agenda", icon: Calendar, allow: ["administrador", "atendente", "tosador", "medico"] },
+  { path: "/consulta-medica", label: "Consulta", icon: Stethoscope, allow: ["administrador", "atendente", "medico"] },
+  { path: "/clientes", label: "Clientes", icon: Dog, allow: ["administrador", "atendente"] },
+  { path: "/vendas", label: "PDV", icon: ShoppingCart, allow: ["administrador", "atendente"] },
+  { path: "/configuracoes", label: "Config", icon: Settings, allow: ["administrador"] },
 ];
 
 export function BottomNav() {

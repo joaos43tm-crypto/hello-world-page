@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
       isFirstUserForCompany = (count ?? 0) === 0
     }
 
-    const role: 'admin' | 'atendente' = isFirstUserForCompany ? 'admin' : 'atendente'
+    const role: 'administrador' | 'atendente' = isFirstUserForCompany ? 'administrador' : 'atendente'
 
     // Ensure a role exists for this user (avoid duplicates)
     const { data: existingRole, error: existingRoleError } = await supabaseAdmin

@@ -3,7 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { Dog } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
-type AppRole = "admin" | "atendente" | "tosador" | "medico";
+type AppRole = "administrador" | "atendente" | "tosador" | "medico";
 
 interface RoleRouteProps {
   children: ReactNode;
@@ -31,8 +31,8 @@ export function RoleRoute({ children, allow }: RoleRouteProps) {
     return <Navigate to="/auth" replace />;
   }
 
-  // Admin sempre tem acesso total
-  if (role === "admin") {
+  // Administrador sempre tem acesso total
+  if (role === "administrador") {
     return <>{children}</>;
   }
 
