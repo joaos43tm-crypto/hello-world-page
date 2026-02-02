@@ -420,6 +420,18 @@ export const appointmentsApi = {
     return data || [];
   },
 
+  async getByDateRange(startDate: string, endDate: string): Promise<Appointment[]> {
+    const { data, error } = await supabase
+      .from("appointments")
+      .select("*, pet:pets(*, tutor:tutors(*)), service:services(*)")
+      .gte("scheduled_date", startDate)
+      .lte("scheduled_date", endDate)
+      .order("scheduled_date", { ascending: true })
+      .order("scheduled_time", { ascending: true });
+    if (error) throw error;
+    return data || [];
+  },
+
   async getToday(): Promise<Appointment[]> {
     const today = new Date().toISOString().split('T')[0];
     return this.getByDate(today);
