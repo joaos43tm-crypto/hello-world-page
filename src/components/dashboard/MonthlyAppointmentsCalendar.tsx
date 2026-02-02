@@ -46,9 +46,35 @@ export function MonthlyAppointmentsCalendar({
       .sort((a, b) => (a.scheduled_time ?? "").localeCompare(b.scheduled_time ?? ""));
   }, [appointments, selectedDate]);
 
+  const selectedDateLabel = useMemo(() => {
+    const d = new Date(`${selectedDate}T12:00:00`);
+    return d.toLocaleDateString("pt-BR", {
+      weekday: "long",
+      day: "2-digit",
+      month: "long",
+    });
+  }, [selectedDate]);
+
+  const monthLabel = useMemo(() => {
+    const d = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+    return d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  }, [monthDate]);
+
   return (
-    <div className="space-y-4">
+    <div className="grid gap-4 lg:grid-cols-[420px,1fr]">
+      {/* Calendar */}
       <div className="pet-card">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <p className="text-sm text-muted-foreground">Mês vigente</p>
+            <p className="text-base font-semibold text-foreground capitalize">{monthLabel}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground">Total no mês</p>
+            <p className="text-lg font-semibold text-foreground">{appointments.length}</p>
+          </div>
+        </div>
+
         <DayPickerCalendar
           mode="single"
           selected={selectedDate ? new Date(`${selectedDate}T12:00:00`) : undefined}
@@ -60,15 +86,29 @@ export function MonthlyAppointmentsCalendar({
           fromMonth={monthStart}
           toMonth={monthStart}
           showOutsideDays={false}
+          className="w-full"
+          classNames={{
+            months: "flex flex-col space-y-4",
+            month: "space-y-4",
+            table: "w-full border-collapse",
+            head_row: "flex justify-between",
+            head_cell:
+              "text-muted-foreground rounded-md w-[calc((100%-24px)/7)] font-normal text-[0.75rem] text-center",
+            row: "flex w-full mt-2 justify-between",
+            cell:
+              "w-[calc((100%-24px)/7)] aspect-square text-center text-sm p-0 relative focus-within:relative focus-within:z-20",
+            day:
+              "h-full w-full rounded-xl hover:bg-accent data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground",
+          }}
           components={{
             DayContent: ({ date }) => {
               const dateStr = isoDateInTimeZone(date);
               const count = countsByDate.get(dateStr) ?? 0;
               return (
                 <div className="relative w-full h-full flex items-center justify-center">
-                  <span>{date.getDate()}</span>
+                  <span className="leading-none">{date.getDate()}</span>
                   {count > 0 && (
-                    <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[10px] leading-none px-1 rounded-full bg-primary text-primary-foreground">
+                    <span className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[10px] leading-none px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">
                       {count}
                     </span>
                   )}
@@ -77,12 +117,28 @@ export function MonthlyAppointmentsCalendar({
             },
           }}
         />
+
+        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+          <span>• Número = qtde de agendamentos</span>
+          <span className="capitalize">Selecionado: {selectedDateLabel}</span>
+        </div>
       </div>
 
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-foreground">Agendamentos do dia</h2>
+      {/* Day panel */}
+      <div className="pet-card">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <p className="text-sm text-muted-foreground">Agendamentos do dia</p>
+            <p className="text-lg font-semibold text-foreground capitalize">{selectedDateLabel}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground">Total</p>
+            <p className="text-lg font-semibold text-foreground">{selectedAppointments.length}</p>
+          </div>
+        </div>
+
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {[1, 2, 3].map((i) => (
               <div key={i} className="pet-card animate-pulse">
                 <div className="h-16 bg-muted rounded-lg mb-3" />
@@ -92,7 +148,7 @@ export function MonthlyAppointmentsCalendar({
             ))}
           </div>
         ) : selectedAppointments.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {selectedAppointments.map((appointment) => (
               <AppointmentCard
                 key={appointment.id}
@@ -103,7 +159,7 @@ export function MonthlyAppointmentsCalendar({
             ))}
           </div>
         ) : (
-          <div className="pet-card text-center py-10">
+          <div className="text-center py-10">
             <p className="text-muted-foreground">Nenhum agendamento para esta data.</p>
           </div>
         )}
