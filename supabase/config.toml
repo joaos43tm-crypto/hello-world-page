@@ -1,1 +1,13 @@
 project_id = "edgxhgevaduxnxtfyyfq"
+
+[functions.bootstrap-user]
+verify_jwt = false
+
+[functions.create-user]
+verify_jwt = false
+
+[functions.reset-cnpj-data]
+verify_jwt = false
+
+[functions.seed-demo-data]
+verify_jwt = false
