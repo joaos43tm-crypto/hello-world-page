@@ -43,6 +43,9 @@ export function AppointmentCard({ appointment, onStatusChange, onWhatsApp }: App
   const status = appointment.status || "agendado";
   const next = nextStatus[status];
 
+  const isMedicalAppointment = /consulta/i.test(service?.name ?? "");
+  const canAdvanceStatus = !(isMedicalAppointment && status === "agendado");
+
   const handleWhatsApp = () => {
     if (!tutor?.phone) return;
 
@@ -129,7 +132,7 @@ export function AppointmentCard({ appointment, onStatusChange, onWhatsApp }: App
           </Button>
         )}
         
-        {next && onStatusChange && (
+        {next && onStatusChange && canAdvanceStatus && (
           <Button
             size="sm"
             className="flex-1 gap-2 bg-primary hover:bg-primary/90"
