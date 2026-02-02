@@ -101,6 +101,7 @@ export default function Vendas() {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
 
   // Caixa
   const [cashSession, setCashSession] = useState<CashRegisterSession | null>(null);
@@ -166,6 +167,46 @@ export default function Vendas() {
       payment2Amount
     )}`;
   }, [payment1Amount, payment1Method, payment2Amount, payment2Method]);
+
+  const handlePrintReceiptPreview = async () => {
+    if (cart.length === 0) return;
+    if (paymentSplitError) {
+      toast({
+        title: "Pagamento inválido",
+        description: paymentSplitError,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const receiptBytes = await generateSaleReceiptPdf({
+        storeName,
+        sale: {
+          id: "PREVIEW",
+          createdAt: new Date().toISOString(),
+          paymentMethod: paymentMethodSummary,
+          customerName: null,
+        },
+        items: cart.map((c) => ({
+          name: c.name,
+          quantity: c.quantity,
+          unitPrice: c.price,
+          subtotal: c.price * c.quantity,
+        })),
+        total,
+      });
+
+      await openAndPrintPdfBytes(receiptBytes);
+    } catch (e) {
+      console.error("Error printing receipt preview:", e);
+      toast({
+        title: "Erro ao gerar recibo",
+        description: "Não foi possível gerar/imprimir o recibo agora.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const canSell = useMemo(() => {
     if (!cashSession) return false;
@@ -879,6 +920,19 @@ export default function Vendas() {
                     </span>
                   </div>
 
+                  {/* Receipt Preview */}
+                  <div className="mb-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setReceiptPreviewOpen(true)}
+                      disabled={!canSell || cart.length === 0}
+                    >
+                      Ver resumo/recibo
+                    </Button>
+                  </div>
+
                   <Button
                     onClick={handleFinalizeSale}
                     disabled={isProcessing || !canSell || !!paymentSplitError}
@@ -987,6 +1041,64 @@ export default function Vendas() {
             </Button>
             <Button onClick={handleCloseCash} disabled={isProcessing}>
               Fechar e gerar fechamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Prévia de recibo */}
+      <Dialog open={receiptPreviewOpen} onOpenChange={setReceiptPreviewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Resumo / Recibo (prévia)</DialogTitle>
+            <DialogDescription>
+              Confira os itens e o pagamento antes de finalizar. Você pode imprimir esta prévia.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">Itens</p>
+              <div className="max-h-[40vh] overflow-y-auto rounded-md border border-border">
+                <div className="divide-y divide-border">
+                  {cart.map((c) => (
+                    <div key={c.id} className="p-3 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{c.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {c.quantity} × R$ {c.price.toFixed(2)}
+                        </p>
+                      </div>
+                      <p className="text-sm font-medium text-foreground whitespace-nowrap">
+                        R$ {(c.price * c.quantity).toFixed(2)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">Pagamento</p>
+              <div className="rounded-md border border-border p-3 space-y-1">
+                <p className="text-sm text-foreground">{formatPaymentSummary(payment1Method, payment1Amount)}</p>
+                <p className="text-sm text-foreground">{formatPaymentSummary(payment2Method, payment2Amount)}</p>
+                {paymentSplitError && <p className="text-sm text-destructive">{paymentSplitError}</p>}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border border-border p-3">
+              <span className="text-sm text-muted-foreground">Total</span>
+              <span className="text-lg font-semibold text-foreground">R$ {total.toFixed(2)}</span>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReceiptPreviewOpen(false)}>
+              Fechar
+            </Button>
+            <Button onClick={handlePrintReceiptPreview} disabled={!canSell || cart.length === 0 || !!paymentSplitError}>
+              Imprimir recibo
             </Button>
           </DialogFooter>
         </DialogContent>
