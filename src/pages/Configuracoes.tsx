@@ -107,6 +107,13 @@ export default function Configuracoes() {
   const [isResettingData, setIsResettingData] = useState(false);
   const isResetAllowed = isAdmin && !!profile?.cnpj;
 
+  const [seedConfirm, setSeedConfirm] = useState("");
+  const [isSeedingData, setIsSeedingData] = useState(false);
+
+  const isPreviewEnv =
+    typeof window !== "undefined" &&
+    (window.location.hostname.includes("lovable.app") || window.location.hostname.includes("lovableproject.com"));
+
   // Create user modal
   const [createOpen, setCreateOpen] = useState(false);
   const [newUserName, setNewUserName] = useState("");
@@ -469,24 +476,38 @@ export default function Configuracoes() {
     }
   };
 
-  const seedSnippet = `// Executar no console do navegador (após login)
-const session = JSON.parse(localStorage.getItem("sb-edgxhgevaduxnxtfyyfq-auth-token") || "{}");
-const token = session?.access_token;
-await fetch("https://edgxhgevaduxnxtfyyfq.supabase.co/functions/v1/seed-demo-data", {
-  method: "POST",
-  headers: {
-    Authorization: token ? "Bearer " + token : "",
-    "Content-Type": "application/json",
-  },
-  body: "{}",
-}).then((r) => r.json());`;
+  const handleSeedDemoData = async () => {
+    if (!isAdmin) return;
+    if (!profile?.cnpj) {
+      toast({ title: "Sem CNPJ", description: "Seu usuário não possui CNPJ vinculado.", variant: "destructive" });
+      return;
+    }
 
-  const copySeedSnippet = async () => {
+    const confirm = seedConfirm.trim();
+    if (confirm !== "GERAR") {
+      toast({ title: "Confirmação inválida", description: "Digite GERAR para confirmar.", variant: "destructive" });
+      return;
+    }
+
+    setIsSeedingData(true);
     try {
-      await navigator.clipboard.writeText(seedSnippet);
-      toast({ title: "Copiado", description: "Comando copiado para a área de transferência." });
-    } catch {
-      toast({ title: "Não foi possível copiar", variant: "destructive" });
+      const { data, error } = await supabase.functions.invoke("seed-demo-data", { body: {} });
+      if (error) {
+        toast({ title: "Erro ao gerar dados", description: error.message, variant: "destructive" });
+        return;
+      }
+      if (data?.error) {
+        toast({ title: "Erro ao gerar dados", description: String(data.error), variant: "destructive" });
+        return;
+      }
+
+      toast({ title: "Dados gerados", description: "Dados fictícios criados para o seu CNPJ." });
+      setSeedConfirm("");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erro desconhecido";
+      toast({ title: "Erro ao gerar dados", description: message, variant: "destructive" });
+    } finally {
+      setIsSeedingData(false);
     }
   };
 
@@ -1104,20 +1125,51 @@ await fetch("https://edgxhgevaduxnxtfyyfq.supabase.co/functions/v1/seed-demo-dat
                   <div>
                     <p className="font-medium text-foreground">Dados fictícios (sem botão na interface)</p>
                     <p className="text-sm text-muted-foreground">
-                      Para gerar dados de teste, execute a Edge Function <code>seed-demo-data</code> fora da interface.
-                      Abaixo está um exemplo para rodar no console do navegador.
+                      Gere clientes/pets/agendamentos/vendas de exemplo para testar o sistema. Este botão aparece apenas
+                      no ambiente de preview.
                     </p>
                   </div>
 
-                  <pre className="text-sm bg-background border rounded-lg p-3 overflow-auto">
-                    {seedSnippet}
-                  </pre>
+                  {isPreviewEnv ? (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="seedConfirm">Digite GERAR para confirmar</Label>
+                        <Input
+                          id="seedConfirm"
+                          value={seedConfirm}
+                          onChange={(e) => setSeedConfirm(e.target.value)}
+                          placeholder="GERAR"
+                          className="h-12"
+                          maxLength={20}
+                        />
+                      </div>
 
-                  <div className="flex gap-2">
-                    <Button variant="outline" onClick={copySeedSnippet}>
-                      Copiar comando
-                    </Button>
-                  </div>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            disabled={!isAdmin || isSeedingData || seedConfirm.trim() !== "GERAR"}
+                          >
+                            {isSeedingData ? "Gerando..." : "Criar dados fictícios"}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Criar dados fictícios?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Isso vai inserir dados de exemplo no ambiente atual para o CNPJ {profile?.cnpj}.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleSeedDemoData}>Confirmar</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Disponível apenas no ambiente de preview.</p>
+                  )}
                 </div>
               </div>
             )}
