@@ -172,17 +172,29 @@ export default function Auth() {
           }
         } else {
           // Ensure the first account gets admin privileges
-          try {
-            await supabase.functions.invoke("bootstrap-user", { body: {} });
-          } catch (e) {
-            console.warn("bootstrap-user failed (non-blocking):", e);
-          }
+          // IMPORTANT: signUp may not create a session (e.g. email confirmation enabled).
+          // Only call bootstrap-user when there's a valid session.
+          const { data: sessionData } = await supabase.auth.getSession();
 
-          toast({ 
-            title: "Conta criada! 🎉",
-            description: "Você já pode acessar o sistema.",
-          });
-          navigate("/");
+          if (sessionData.session) {
+            try {
+              await supabase.functions.invoke("bootstrap-user", { body: {} });
+            } catch (e) {
+              console.warn("bootstrap-user failed (non-blocking):", e);
+            }
+
+            toast({
+              title: "Conta criada! 🎉",
+              description: "Você já pode acessar o sistema.",
+            });
+            navigate("/");
+          } else {
+            toast({
+              title: "Conta criada!",
+              description:
+                "Se a confirmação de e-mail estiver habilitada, confirme o e-mail para fazer login.",
+            });
+          }
         }
       }
     } catch (error) {

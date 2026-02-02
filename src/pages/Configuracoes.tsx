@@ -95,14 +95,14 @@ export default function Configuracoes() {
   const [newUserName, setNewUserName] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
-  const [newUserRole, setNewUserRole] = useState<"admin" | "atendente" | "tosador" | "medico">("atendente");
+  const [newUserRole, setNewUserRole] = useState<"administrador" | "atendente" | "tosador" | "medico">("atendente");
   const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   // Edit user modal
   const [editOpen, setEditOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
   const [editUserName, setEditUserName] = useState("");
-  const [editUserRole, setEditUserRole] = useState<"admin" | "atendente" | "tosador" | "medico">("atendente");
+  const [editUserRole, setEditUserRole] = useState<"administrador" | "atendente" | "tosador" | "medico">("atendente");
   const [isUpdatingUser, setIsUpdatingUser] = useState(false);
   const [storeName, setStoreName] = useState("");
   const [storePhone, setStorePhone] = useState("");
@@ -235,7 +235,7 @@ export default function Configuracoes() {
 
   const handleRoleChange = async (
     userId: string,
-    newRole: "admin" | "atendente" | "tosador" | "medico"
+    newRole: "administrador" | "atendente" | "tosador" | "medico"
   ) => {
     try {
       const { error } = await supabase
@@ -424,7 +424,7 @@ export default function Configuracoes() {
               Configurações
             </h1>
             <p className="text-muted-foreground">
-              {profile?.name} • {role === "admin" ? "Administrador" : role === "atendente" ? "Atendente" : "Tosador"}
+                {profile?.name} • {role === "administrador" ? "Administrador" : role === "atendente" ? "Atendente" : "Tosador"}
             </p>
           </div>
           <Button variant="outline" onClick={signOut} className="gap-2">
@@ -839,7 +839,7 @@ export default function Configuracoes() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="admin">Administrador</SelectItem>
+                              <SelectItem value="administrador">Administrador</SelectItem>
                               <SelectItem value="atendente">Atendente</SelectItem>
                               <SelectItem value="tosador">Tosador</SelectItem>
                               <SelectItem value="medico">Médico</SelectItem>
@@ -925,7 +925,7 @@ export default function Configuracoes() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="admin">Administrador</SelectItem>
+                            <SelectItem value="administrador">Administrador</SelectItem>
                             <SelectItem value="atendente">Atendente</SelectItem>
                             <SelectItem value="tosador">Tosador</SelectItem>
                             <SelectItem value="medico">Médico</SelectItem>

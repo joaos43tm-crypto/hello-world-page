@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-export type AppRole = "admin" | "atendente" | "tosador" | "medico";
+export type AppRole = "administrador" | "atendente" | "tosador" | "medico";
 
 interface Profile {
   id: string;
@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserData = async (userId: string) => {
     try {
-      // Ensure the user has a role/profile (first account becomes admin)
+      // Ensure the user has a role/profile (first account becomes administrador)
       try {
         await supabase.functions.invoke("bootstrap-user", { body: {} });
       } catch (e) {
@@ -140,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRole(null);
   };
 
-  const isAdmin = role === "admin";
+  const isAdmin = role === "administrador";
 
   const refreshUserData = async () => {
     if (!user?.id) return;

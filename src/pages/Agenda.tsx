@@ -30,7 +30,7 @@ import { useAuth } from "@/contexts/AuthContext";
 export default function Agenda() {
   const { toast } = useToast();
   const { role } = useAuth();
-  const canCreateAppointment = role === "admin" || role === "atendente";
+  const canCreateAppointment = role === "administrador" || role === "atendente";
 
   const [selectedDate, setSelectedDate] = useState(isoDateInTimeZone());
   const [appointments, setAppointments] = useState<Appointment[]>([]);

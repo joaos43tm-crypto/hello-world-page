@@ -15,7 +15,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 
-type AppRole = "admin" | "atendente" | "tosador" | "medico";
+type AppRole = "administrador" | "atendente" | "tosador" | "medico";
 
 type SidebarItem = {
   path: string;
@@ -25,25 +25,32 @@ type SidebarItem = {
 };
 
 const mainNavItems: SidebarItem[] = [
-  { path: "/", label: "Dashboard", icon: LayoutDashboard, allow: ["admin", "atendente", "tosador", "medico"] },
-  { path: "/agenda", label: "Agenda", icon: Calendar, allow: ["admin", "atendente", "tosador", "medico"] },
-  { path: "/consulta-medica", label: "Consulta Médica", icon: Stethoscope, allow: ["admin", "atendente", "medico"] },
-  { path: "/clientes", label: "Clientes & Pets", icon: Dog, allow: ["admin", "atendente"] },
-  { path: "/vendas", label: "PDV", icon: ShoppingCart, allow: ["admin", "atendente"] },
-  { path: "/relatorios", label: "Relatórios", icon: BarChart3, allow: ["admin", "atendente"] },
+  { path: "/", label: "Dashboard", icon: LayoutDashboard, allow: ["administrador", "atendente", "tosador", "medico"] },
+  { path: "/agenda", label: "Agenda", icon: Calendar, allow: ["administrador", "atendente", "tosador", "medico"] },
+  { path: "/consulta-medica", label: "Consulta Médica", icon: Stethoscope, allow: ["administrador", "atendente", "medico"] },
+  { path: "/clientes", label: "Clientes & Pets", icon: Dog, allow: ["administrador", "atendente"] },
+  { path: "/vendas", label: "PDV", icon: ShoppingCart, allow: ["administrador", "atendente"] },
+  { path: "/relatorios", label: "Relatórios", icon: BarChart3, allow: ["administrador", "atendente"] },
 ];
 
 const settingsNavItems: SidebarItem[] = [
-  { path: "/servicos", label: "Serviços", icon: Scissors, allow: ["admin"] },
-  { path: "/produtos", label: "Produtos", icon: Package, allow: ["admin"] },
-  { path: "/configuracoes", label: "Configurações", icon: Settings, allow: ["admin"] },
+  { path: "/servicos", label: "Serviços", icon: Scissors, allow: ["administrador"] },
+  { path: "/produtos", label: "Produtos", icon: Package, allow: ["administrador"] },
+  { path: "/configuracoes", label: "Configurações", icon: Settings, allow: ["administrador"] },
 ];
 
 export function Sidebar() {
   const location = useLocation();
   const { profile, role, signOut } = useAuth();
 
-  const roleLabel = role === "admin" ? "Admin" : role === "atendente" ? "Atendente" : role === "medico" ? "Médico" : "Tosador";
+  const roleLabel =
+    role === "administrador"
+      ? "Administrador"
+      : role === "atendente"
+        ? "Atendente"
+        : role === "medico"
+          ? "Médico"
+          : "Tosador";
 
   return (
     <aside className="hidden md:flex flex-col w-64 bg-card border-r border-border h-screen sticky top-0">
