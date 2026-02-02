@@ -37,12 +37,24 @@ import {
   Shield,
   LogOut,
   Plus,
-  Pencil
+  Pencil,
+  Database
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 
 interface StoreSettings {
@@ -84,11 +96,16 @@ const weekDays = [
 export default function Configuracoes() {
   const { toast } = useToast();
   const { profile, role, isAdmin, signOut, refreshUserData } = useAuth();
-  const [activeTab, setActiveTab] = useState<"store" | "hours" | "printer" | "features" | "users">("store");
+  const [activeTab, setActiveTab] = useState<"store" | "hours" | "printer" | "features" | "users" | "data">("store");
   const [settings, setSettings] = useState<StoreSettings | null>(null);
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Data tab
+  const [resetConfirm, setResetConfirm] = useState("");
+  const [isResettingData, setIsResettingData] = useState(false);
+  const isResetAllowed = isAdmin && !!profile?.cnpj;
 
   // Create user modal
   const [createOpen, setCreateOpen] = useState(false);
@@ -411,7 +428,67 @@ export default function Configuracoes() {
     { id: "printer", label: "Impressora", icon: Printer },
     { id: "features", label: "Recursos", icon: Settings },
     ...(isAdmin ? [{ id: "users", label: "Usuários", icon: Users }] : []),
+    ...(isAdmin ? [{ id: "data", label: "Dados", icon: Database }] : []),
   ];
+
+  const handleResetCompanyData = async () => {
+    if (!isResetAllowed) return;
+
+    const confirm = resetConfirm.trim();
+    if (confirm !== "APAGAR") {
+      toast({ title: "Confirmação inválida", description: "Digite APAGAR para confirmar.", variant: "destructive" });
+      return;
+    }
+
+    setIsResettingData(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("reset-cnpj-data", {
+        body: { confirm },
+      });
+
+      if (error) {
+        toast({ title: "Erro ao apagar dados", description: error.message, variant: "destructive" });
+        return;
+      }
+
+      if (data?.error) {
+        toast({ title: "Erro ao apagar dados", description: String(data.error), variant: "destructive" });
+        return;
+      }
+
+      toast({
+        title: "Dados apagados",
+        description: "Os dados vinculados ao CNPJ foram removidos do ambiente atual.",
+      });
+      setResetConfirm("");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erro desconhecido";
+      toast({ title: "Erro ao apagar dados", description: message, variant: "destructive" });
+    } finally {
+      setIsResettingData(false);
+    }
+  };
+
+  const seedSnippet = `// Executar no console do navegador (após login)
+const session = JSON.parse(localStorage.getItem("sb-edgxhgevaduxnxtfyyfq-auth-token") || "{}");
+const token = session?.access_token;
+await fetch("https://edgxhgevaduxnxtfyyfq.supabase.co/functions/v1/seed-demo-data", {
+  method: "POST",
+  headers: {
+    Authorization: token ? "Bearer " + token : "",
+    "Content-Type": "application/json",
+  },
+  body: "{}",
+}).then((r) => r.json());`;
+
+  const copySeedSnippet = async () => {
+    try {
+      await navigator.clipboard.writeText(seedSnippet);
+      toast({ title: "Copiado", description: "Comando copiado para a área de transferência." });
+    } catch {
+      toast({ title: "Não foi possível copiar", variant: "destructive" });
+    }
+  };
 
   return (
     <MainLayout>
@@ -957,6 +1034,90 @@ export default function Configuracoes() {
                     <li><strong>Tosador:</strong> Visualizar agenda e atualizar status</li>
                     <li><strong>Médico:</strong> Agenda e Consulta Médica</li>
                   </ul>
+                </div>
+              </div>
+            )}
+
+            {/* Data Tab (Admin only) */}
+            {activeTab === "data" && isAdmin && (
+              <div className="pet-card space-y-6 animate-fade-in">
+                <h2 className="font-semibold text-foreground flex items-center gap-2">
+                  <Database size={20} />
+                  Dados
+                </h2>
+
+                <div className="p-4 bg-muted rounded-xl space-y-3">
+                  <div>
+                    <p className="font-medium text-foreground">Apagar dados do CNPJ</p>
+                    <p className="text-sm text-muted-foreground">
+                      Remove todos os dados vinculados ao CNPJ da sua empresa: clientes (tutores), pets, agendamentos,
+                      vendas/itens e histórico de caixa, além de consultas médicas.
+                    </p>
+                  </div>
+
+                  {!profile?.cnpj ? (
+                    <p className="text-sm text-muted-foreground">
+                      Seu usuário não possui CNPJ vinculado — não é possível apagar dados por empresa.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="resetConfirm">Digite APAGAR para confirmar</Label>
+                        <Input
+                          id="resetConfirm"
+                          value={resetConfirm}
+                          onChange={(e) => setResetConfirm(e.target.value)}
+                          placeholder="APAGAR"
+                          className="h-12"
+                          maxLength={20}
+                        />
+                      </div>
+
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="destructive"
+                            disabled={!isResetAllowed || isResettingData || resetConfirm.trim() !== "APAGAR"}
+                          >
+                            {isResettingData ? "Apagando..." : "Apagar todos os dados do CNPJ"}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Apagar dados da empresa?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Esta ação é irreversível e remove os dados do ambiente atual (teste/produção) vinculados ao
+                              CNPJ {profile.cnpj}.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleResetCompanyData}>Confirmar</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-4 bg-muted rounded-xl space-y-3">
+                  <div>
+                    <p className="font-medium text-foreground">Dados fictícios (sem botão na interface)</p>
+                    <p className="text-sm text-muted-foreground">
+                      Para gerar dados de teste, execute a Edge Function <code>seed-demo-data</code> fora da interface.
+                      Abaixo está um exemplo para rodar no console do navegador.
+                    </p>
+                  </div>
+
+                  <pre className="text-sm bg-background border rounded-lg p-3 overflow-auto">
+                    {seedSnippet}
+                  </pre>
+
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={copySeedSnippet}>
+                      Copiar comando
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
