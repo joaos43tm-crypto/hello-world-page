@@ -35,13 +35,13 @@ import {
 } from "lucide-react";
 import {
   cashRegisterApi,
+  appointmentsApi,
   productsApi,
   salesApi,
-  servicesApi,
   tutorsApi,
   type CashRegisterSession,
+  type Appointment,
   type Product,
-  type Service,
   type Tutor,
 } from "@/lib/petcontrol.api";
 import { useToast } from "@/hooks/use-toast";
@@ -56,9 +56,10 @@ interface CartItem {
   name: string;
   price: number;
   quantity: number;
-  type: "product" | "service";
+  type: "product" | "appointment";
   productId?: string;
   serviceId?: string;
+  appointmentId?: string;
 }
 
 const paymentMethods = [
@@ -85,8 +86,8 @@ function parseMoneyInput(raw: string) {
 export default function Vendas() {
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
   const [tutors, setTutors] = useState<Tutor[]>([]);
+  const [finalizedAppointments, setFinalizedAppointments] = useState<Appointment[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedTutor, setSelectedTutor] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("dinheiro");
@@ -126,14 +127,14 @@ export default function Vendas() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [productsData, servicesData, tutorsData] = await Promise.all([
+        const [productsData, tutorsData, finalized] = await Promise.all([
           productsApi.getActive(),
-          servicesApi.getActive(),
           tutorsApi.getAll(),
+          appointmentsApi.getByStatus("finalizado"),
         ]);
         setProducts(productsData);
-        setServices(servicesData);
         setTutors(tutorsData);
+        setFinalizedAppointments(finalized);
       } catch (error) {
         console.error("Error loading data:", error);
       } finally {
@@ -185,10 +186,8 @@ export default function Vendas() {
     loadCash();
   }, [toast]);
 
-  const addToCart = (item: Product | Service, type: "product" | "service") => {
-    const existingIndex = cart.findIndex(
-      (c) => (type === "product" ? c.productId : c.serviceId) === item.id
-    );
+  const addProductToCart = (product: Product) => {
+    const existingIndex = cart.findIndex((c) => c.type === "product" && c.productId === product.id);
 
     if (existingIndex >= 0) {
       const newCart = [...cart];
@@ -199,15 +198,48 @@ export default function Vendas() {
         ...cart,
         {
           id: crypto.randomUUID(),
-          name: item.name,
-          price: item.price,
+          name: product.name,
+          price: product.price,
           quantity: 1,
-          type,
-          productId: type === "product" ? item.id : undefined,
-          serviceId: type === "service" ? item.id : undefined,
+          type: "product",
+          productId: product.id,
         },
       ]);
     }
+  };
+
+  const addAppointmentToCart = (appointment: Appointment) => {
+    const existingIndex = cart.findIndex(
+      (c) => c.type === "appointment" && c.appointmentId === appointment.id
+    );
+
+    const petName = appointment.pet?.name ?? "Pet";
+    const serviceName = appointment.service?.name ?? "Serviço";
+    const time = appointment.scheduled_time?.slice(0, 5) ?? "";
+    const datePt = appointment.scheduled_date
+      ? new Date(`${appointment.scheduled_date}T12:00:00`).toLocaleDateString("pt-BR")
+      : "";
+    const price = Number(
+      appointment.price ?? appointment.service?.price ?? 0
+    );
+
+    if (existingIndex >= 0) {
+      // agendamento entra como item único (quantidade 1)
+      return;
+    }
+
+    setCart([
+      ...cart,
+      {
+        id: crypto.randomUUID(),
+        name: `${petName} • ${serviceName} (${datePt} ${time})`,
+        price,
+        quantity: 1,
+        type: "appointment",
+        serviceId: appointment.service_id,
+        appointmentId: appointment.id,
+      },
+    ]);
   };
 
   const updateQuantity = (id: string, delta: number) => {
@@ -396,6 +428,18 @@ export default function Vendas() {
         }))
       );
 
+      const appointmentIds = cart
+        .filter((c) => c.type === "appointment" && !!c.appointmentId)
+        .map((c) => c.appointmentId!)
+        .filter(Boolean);
+
+      if (appointmentIds.length) {
+        await Promise.all(
+          appointmentIds.map((id) => appointmentsApi.updateStatus(id, "pago"))
+        );
+        setFinalizedAppointments((prev) => prev.filter((a) => !appointmentIds.includes(a.id)));
+      }
+
       // Impressão automática do recibo (PDF). Em ambiente com impressora térmica instalada,
       // o navegador imprimirá para ela via diálogo/config padrão do sistema.
       if (printerEnabled) {
@@ -554,7 +598,7 @@ export default function Vendas() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Products & Services */}
+          {/* Produtos & Agendamentos */}
           <div className="lg:col-span-2 space-y-6">
             {/* Products */}
             <div className="pet-card">
@@ -573,7 +617,7 @@ export default function Vendas() {
                   {products.map((product) => (
                     <button
                       key={product.id}
-                      onClick={() => addToCart(product, "product")}
+                      onClick={() => addProductToCart(product)}
                       disabled={!canSell}
                       className="p-3 bg-muted/50 hover:bg-accent rounded-xl text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -598,30 +642,47 @@ export default function Vendas() {
               )}
             </div>
 
-            {/* Services */}
+            {/* Finalized Appointments */}
             <div className="pet-card">
-              <h2 className="font-semibold text-foreground mb-4">Serviços</h2>
-              {services.length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {services.map((service) => (
-                    <button
-                      key={service.id}
-                      onClick={() => addToCart(service, "service")}
-                      disabled={!canSell}
-                      className="p-3 bg-secondary/10 hover:bg-secondary/20 rounded-xl text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <p className="font-medium text-foreground truncate">
-                        {service.name}
-                      </p>
-                      <p className="text-secondary font-semibold">
-                        R$ {service.price.toFixed(2)}
-                      </p>
-                    </button>
+              <h2 className="font-semibold text-foreground mb-4">Agendamentos Finalizados</h2>
+              {isLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />
                   ))}
+                </div>
+              ) : finalizedAppointments.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-1">
+                  {finalizedAppointments.map((a) => {
+                    const petName = a.pet?.name ?? "Pet";
+                    const tutorName = a.pet?.tutor?.name ?? "Cliente";
+                    const serviceName = a.service?.name ?? "Serviço";
+                    const time = a.scheduled_time?.slice(0, 5) ?? "";
+                    const datePt = a.scheduled_date
+                      ? new Date(`${a.scheduled_date}T12:00:00`).toLocaleDateString("pt-BR")
+                      : "";
+                    const price = Number(a.price ?? a.service?.price ?? 0);
+                    return (
+                      <button
+                        key={a.id}
+                        onClick={() => addAppointmentToCart(a)}
+                        disabled={!canSell}
+                        className="p-3 bg-muted/50 hover:bg-accent rounded-xl text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <p className="font-medium text-foreground truncate">
+                          {petName} • {serviceName}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {tutorName} • {datePt} {time}
+                        </p>
+                        <p className="text-primary font-semibold">R$ {price.toFixed(2)}</p>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-muted-foreground text-center py-4">
-                  Nenhum serviço cadastrado
+                  Nenhum agendamento finalizado pendente de pagamento
                 </p>
               )}
             </div>
