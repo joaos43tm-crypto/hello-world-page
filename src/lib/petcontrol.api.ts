@@ -50,15 +50,6 @@ export interface Pet {
   tutor?: Tutor;
 }
 
-export interface Professional {
-  id: string;
-  name: string;
-  phone?: string | null;
-  specialty?: string | null;
-  is_active?: boolean;
-  created_at?: string;
-}
-
 export interface Service {
   id: string;
   name: string;
@@ -73,7 +64,6 @@ export interface Appointment {
   id: string;
   pet_id: string;
   service_id: string;
-  professional_id?: string | null;
   scheduled_date: string;
   scheduled_time: string;
   status?: AppointmentStatus;
@@ -84,7 +74,6 @@ export interface Appointment {
   updated_at?: string;
   pet?: Pet;
   service?: Service;
-  professional?: Professional;
 }
 
 export interface Product {
@@ -353,60 +342,6 @@ export const petsApi = {
 };
 
 // ============================================
-// PROFISSIONAIS
-// ============================================
-
-export const professionalsApi = {
-  async getAll(): Promise<Professional[]> {
-    const { data, error } = await supabase
-      .from('professionals')
-      .select('*')
-      .order('name');
-    if (error) throw error;
-    return data || [];
-  },
-
-  async getActive(): Promise<Professional[]> {
-    const { data, error } = await supabase
-      .from('professionals')
-      .select('*')
-      .eq('is_active', true)
-      .order('name');
-    if (error) throw error;
-    return data || [];
-  },
-
-  async create(professional: Omit<Professional, 'id' | 'created_at'>): Promise<Professional> {
-    const { data, error } = await supabase
-      .from('professionals')
-      .insert(professional)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
-  },
-
-  async update(id: string, professional: Partial<Professional>): Promise<Professional> {
-    const { data, error } = await supabase
-      .from('professionals')
-      .update(professional)
-      .eq('id', id)
-      .select()
-      .single();
-    if (error) throw error;
-    return data;
-  },
-
-  async delete(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('professionals')
-      .delete()
-      .eq('id', id);
-    if (error) throw error;
-  },
-};
-
-// ============================================
 // SERVIÇOS
 // ============================================
 
@@ -468,7 +403,7 @@ export const appointmentsApi = {
   async getAll(): Promise<Appointment[]> {
     const { data, error } = await supabase
       .from('appointments')
-      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*), professional:professionals(*)')
+      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*)')
       .order('scheduled_date', { ascending: true })
       .order('scheduled_time', { ascending: true });
     if (error) throw error;
@@ -478,7 +413,7 @@ export const appointmentsApi = {
   async getByDate(date: string): Promise<Appointment[]> {
     const { data, error } = await supabase
       .from('appointments')
-      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*), professional:professionals(*)')
+      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*)')
       .eq('scheduled_date', date)
       .order('scheduled_time', { ascending: true });
     if (error) throw error;
@@ -493,7 +428,7 @@ export const appointmentsApi = {
   async getByStatus(status: AppointmentStatus): Promise<Appointment[]> {
     const { data, error } = await supabase
       .from('appointments')
-      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*), professional:professionals(*)')
+      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*)')
       .eq('status', status)
       .order('scheduled_date', { ascending: true })
       .order('scheduled_time', { ascending: true });
@@ -505,7 +440,7 @@ export const appointmentsApi = {
     const { data, error } = await supabase
       .from('appointments')
       .insert(appointment)
-      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*), professional:professionals(*)')
+      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*)')
       .single();
     if (error) throw error;
     return data;
@@ -516,7 +451,7 @@ export const appointmentsApi = {
       .from('appointments')
       .update(appointment)
       .eq('id', id)
-      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*), professional:professionals(*)')
+      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*)')
       .single();
     if (error) throw error;
     return data;
@@ -527,7 +462,7 @@ export const appointmentsApi = {
       .from('appointments')
       .update({ status })
       .eq('id', id)
-      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*), professional:professionals(*)')
+      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*)')
       .single();
     if (error) throw error;
     
@@ -552,7 +487,7 @@ export const appointmentsApi = {
       .from('appointments')
       .update({ whatsapp_sent: true })
       .eq('id', id)
-      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*), professional:professionals(*)')
+      .select('*, pet:pets(*, tutor:tutors(*)), service:services(*)')
       .single();
     if (error) throw error;
     return data;

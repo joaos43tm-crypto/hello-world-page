@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { 
   Dog, 
   Clock, 
-  User, 
   Scissors,
   MessageCircle,
   ChevronRight,
@@ -37,7 +36,6 @@ export function AppointmentCard({ appointment, onStatusChange, onWhatsApp }: App
   const pet = appointment.pet;
   const tutor = pet?.tutor;
   const service = appointment.service;
-  const professional = appointment.professional;
   const status = appointment.status || "agendado";
   const next = nextStatus[status];
 
@@ -86,12 +84,6 @@ export function AppointmentCard({ appointment, onStatusChange, onWhatsApp }: App
           <Scissors size={14} />
           <span>{service?.name || "Serviço"}</span>
         </div>
-        {professional && (
-          <div className="flex items-center gap-2 text-muted-foreground col-span-2">
-            <User size={14} />
-            <span>{professional.name}</span>
-          </div>
-        )}
       </div>
 
       {/* Notes */}
