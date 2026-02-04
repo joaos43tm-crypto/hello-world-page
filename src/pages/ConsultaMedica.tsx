@@ -3,13 +3,6 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,6 +10,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { generateConsultationPdf } from "@/lib/medical/consultationPdf";
 import { isoDateInTimeZone } from "@/lib/date";
 import { FileDown, Stethoscope } from "lucide-react";
+import { addDays } from "date-fns";
+import { cn } from "@/lib/utils";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type MedicalOffice = {
   id: string;
@@ -27,6 +23,7 @@ type TodayAppointment = {
   id: string;
   pet_id: string;
   service_id?: string;
+  scheduled_date: string;
   scheduled_time: string;
   status: string | null;
   petName?: string;
@@ -63,6 +60,13 @@ const formatDateTime = (iso: string) =>
   });
 
 const todayISODate = () => isoDateInTimeZone(new Date(), "America/Sao_Paulo");
+
+const upcomingISODateRange = () => {
+  const base = new Date();
+  return [0, 1, 2, 3].map((d) => isoDateInTimeZone(addDays(base, d), "America/Sao_Paulo"));
+};
+
+const weekdayLabels = ["Hoje", "Amanhã", "Depois de amanhã", "+3 dias"] as const;
 
 const emptyFields = (): ConsultationFields => ({
   queixa: "",
@@ -155,8 +159,6 @@ export default function ConsultaMedica() {
   const [offices, setOffices] = useState<MedicalOffice[]>([]);
   const [officeId, setOfficeId] = useState<string>("");
 
-  const [queryDate, setQueryDate] = useState<string>(todayISODate());
-
   const [appointments, setAppointments] = useState<TodayAppointment[]>([]);
   const [appointmentId, setAppointmentId] = useState<string>("");
   const [medicalServiceIds, setMedicalServiceIds] = useState<string[]>([]);
@@ -188,6 +190,15 @@ export default function ConsultaMedica() {
     () => appointments.find((a) => a.id === appointmentId) ?? null,
     [appointments, appointmentId]
   );
+
+  const today = useMemo(() => todayISODate(), []);
+
+  const isSelectedAppointmentToday = useMemo(() => {
+    if (!selectedAppointment) return false;
+    return selectedAppointment.scheduled_date === today;
+  }, [selectedAppointment, today]);
+
+  const selectionDisabled = !!current;
 
   const loadOffices = async () => {
     const { data, error } = await db
@@ -226,78 +237,44 @@ export default function ConsultaMedica() {
     return ids;
   };
 
-  const loadTodayAppointments = async (serviceIds: string[], date: string) => {
+  const loadUpcomingAppointments = async (serviceIds: string[]) => {
     if (serviceIds.length === 0) {
       setAppointments([]);
       return;
     }
 
+    const range = upcomingISODateRange();
+    const start = range[0];
+    const end = range[range.length - 1];
+
     const { data: appts, error: apptsError } = await supabase
       .from("appointments")
-      .select("id,pet_id,scheduled_time,status,service_id")
-      .eq("scheduled_date", date)
+      .select(
+        "id,pet_id,scheduled_date,scheduled_time,status,service_id, pet:pets(name, tutor:tutors(name))"
+      )
+      .gte("scheduled_date", start)
+      .lte("scheduled_date", end)
       .eq("status", "agendado")
       .in("service_id", serviceIds)
+      .order("scheduled_date", { ascending: true })
       .order("scheduled_time", { ascending: true });
 
     if (apptsError) {
-      console.error("Error loading today appointments:", apptsError);
+      console.error("Error loading upcoming appointments:", apptsError);
       toast({ title: "Erro ao carregar agendamentos", variant: "destructive" });
       return;
     }
 
-    const base = (appts ?? []) as TodayAppointment[];
-    const petIds = Array.from(new Set(base.map((a) => a.pet_id).filter(Boolean)));
-
-    if (petIds.length === 0) {
-      setAppointments([]);
-      return;
-    }
-
-    const { data: pets, error: petsError } = await supabase
-      .from("pets")
-      .select("id,name,tutor_id")
-      .in("id", petIds);
-
-    if (petsError) {
-      console.error("Error loading pets for appointments:", petsError);
-      setAppointments(base);
-      return;
-    }
-
-    const petsById = new Map<
-      string,
-      { id: string; name: string; tutor_id: string }
-    >();
-    const tutorIds: string[] = [];
-    for (const p of (pets ?? []) as any[]) {
-      petsById.set(p.id, p);
-      if (p.tutor_id) tutorIds.push(p.tutor_id);
-    }
-
-    const uniqueTutorIds = Array.from(new Set(tutorIds));
-    let tutorsById = new Map<string, { id: string; name: string }>();
-
-    if (uniqueTutorIds.length > 0) {
-      const { data: tutors, error: tutorsError } = await supabase
-        .from("tutors")
-        .select("id,name")
-        .in("id", uniqueTutorIds);
-
-      if (!tutorsError) {
-        tutorsById = new Map((tutors ?? []).map((t: any) => [t.id, t]));
-      }
-    }
-
-    const enriched = base.map((a) => {
-      const pet = petsById.get(a.pet_id);
-      const tutor = pet?.tutor_id ? tutorsById.get(pet.tutor_id) : undefined;
-      return {
-        ...a,
-        petName: pet?.name,
-        tutorName: tutor?.name,
-      };
-    });
+    const enriched = (appts ?? []).map((a: any) => ({
+      id: a.id as string,
+      pet_id: a.pet_id as string,
+      service_id: (a.service_id ?? undefined) as string | undefined,
+      scheduled_date: a.scheduled_date as string,
+      scheduled_time: a.scheduled_time as string,
+      status: (a.status ?? null) as string | null,
+      petName: (a.pet?.name ?? undefined) as string | undefined,
+      tutorName: (a.pet?.tutor?.name ?? undefined) as string | undefined,
+    })) as TodayAppointment[];
 
     setAppointments(enriched);
   };
@@ -358,7 +335,7 @@ export default function ConsultaMedica() {
     const load = async () => {
       await loadOffices();
       const ids = await loadMedicalServices();
-      await loadTodayAppointments(ids, queryDate);
+      await loadUpcomingAppointments(ids);
       if (mounted) await loadCurrentConsultation();
     };
 
@@ -368,7 +345,7 @@ export default function ConsultaMedica() {
       mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, queryDate]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!selectedAppointment) {
@@ -404,7 +381,16 @@ export default function ConsultaMedica() {
     if (!appointmentId || !selectedAppointment) {
       toast({
         title: "Selecione um agendamento",
-        description: "Escolha o cliente/pet agendado para hoje.",
+        description: "Escolha a consulta agendada.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (selectedAppointment.scheduled_date !== today) {
+      toast({
+        title: "Você só pode iniciar atendimentos agendados para hoje",
+        description: "Selecione uma consulta de hoje para iniciar.",
         variant: "destructive",
       });
       return;
@@ -640,7 +626,7 @@ export default function ConsultaMedica() {
               Consulta Médica
             </h1>
             <p className="text-muted-foreground mt-1">
-              Selecione o cliente/pet agendado para hoje e inicie o atendimento.
+              Selecione uma consulta (hoje + próximos 3 dias) e escolha a sala.
             </p>
           </div>
         </header>
@@ -823,91 +809,198 @@ export default function ConsultaMedica() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Selecionar consulta agendada</CardTitle>
+            <CardTitle>Iniciar novo atendimento</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Data</label>
-              <Input
-                type="date"
-                value={queryDate}
-                onChange={(e) => setQueryDate(e.target.value)}
-                disabled={!!current}
-                className="w-fit"
-              />
-              <p className="text-xs text-muted-foreground">
-                Mostrando consultas com status{" "}
-                <span className="font-medium">agendado</span>.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">
-                Cliente / Pet
-              </label>
-              <Select
-                value={appointmentId}
-                onValueChange={setAppointmentId}
-                disabled={!!current}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      appointments.length === 0
-                        ? "Nenhuma consulta agendada para esta data"
-                        : "Selecione um agendamento"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {appointments.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.scheduled_time?.slice(0, 5)} — {a.tutorName ?? "Cliente"} /{" "}
-                      {a.petName ?? "Pet"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">
-                Consultório
-              </label>
-              <Select
-                value={officeId}
-                onValueChange={setOfficeId}
-                disabled={!!current}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um consultório" />
-                </SelectTrigger>
-                <SelectContent>
-                  {offices.map((o) => (
-                    <SelectItem key={o.id} value={o.id}>
-                      {o.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button
-              onClick={handleStart}
-              disabled={isStarting || !user || !!current || appointments.length === 0}
+            <div
+              className={cn(
+                "grid gap-4 lg:grid-cols-2",
+                selectionDisabled && "opacity-60"
+              )}
             >
-              {current
-                ? "Finalize o atendimento atual"
-                : isStarting
-                  ? "Iniciando..."
-                  : "Iniciar Atendimento"}
-            </Button>
+              {/* Coluna: Consultas */}
+              <section className="space-y-3">
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground">
+                      Consultas (Hoje + 3 dias)
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Status: <span className="font-medium">agendado</span>
+                    </p>
+                  </div>
 
-            <p className="text-xs text-muted-foreground">
-              {medicalServicesLoaded && medicalServiceIds.length === 0
-                ? "Nenhum serviço de consulta médica encontrado. Cadastre um serviço com nome contendo 'Consulta' em Serviços."
-                : "O histórico do paciente fica no cadastro do Pet/Cliente."}
-            </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const ids = medicalServiceIds.length
+                        ? medicalServiceIds
+                        : await loadMedicalServices();
+                      await loadUpcomingAppointments(ids);
+                    }}
+                    disabled={selectionDisabled}
+                  >
+                    Atualizar
+                  </Button>
+                </div>
+
+                <ScrollArea className="h-[360px] rounded-md border">
+                  <div className="p-3 space-y-4">
+                    {appointments.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">
+                        Nenhuma consulta agendada para os próximos dias.
+                      </div>
+                    ) : (
+                      upcomingISODateRange().map((iso, idx) => {
+                        const dayAppointments = appointments.filter(
+                          (a) => a.scheduled_date === iso
+                        );
+                        if (dayAppointments.length === 0) return null;
+
+                        return (
+                          <div key={iso} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-xs font-semibold text-foreground">
+                                {weekdayLabels[idx]} ({dayAppointments.length})
+                              </h3>
+                              <span className="text-[11px] text-muted-foreground">
+                                {iso.split("-").reverse().join("/")}
+                              </span>
+                            </div>
+
+                            <div className="space-y-2">
+                              {dayAppointments.map((a) => {
+                                const isSelected = a.id === appointmentId;
+                                return (
+                                  <button
+                                    key={a.id}
+                                    type="button"
+                                    disabled={selectionDisabled}
+                                    onClick={() => setAppointmentId(a.id)}
+                                    className={cn(
+                                      "w-full rounded-md border p-3 text-left transition",
+                                      "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                                      isSelected
+                                        ? "ring-2 ring-primary"
+                                        : "bg-card",
+                                      selectionDisabled &&
+                                        "pointer-events-none select-none"
+                                    )}
+                                  >
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="font-semibold text-foreground">
+                                          {a.scheduled_time?.slice(0, 5) ?? ""}
+                                        </div>
+                                        <div className="mt-1 text-sm text-foreground truncate">
+                                          {a.petName ?? "Pet"}
+                                          <span className="text-muted-foreground">
+                                            {" "}• {a.tutorName ?? "Cliente"}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <div className="shrink-0 text-xs text-muted-foreground">
+                                        {a.scheduled_date === today
+                                          ? "Hoje"
+                                          : "Futuro"}
+                                      </div>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </ScrollArea>
+              </section>
+
+              {/* Coluna: Salas + CTA */}
+              <section className="space-y-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">
+                    Escolha a sala (consultório)
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    1 clique para selecionar.
+                  </p>
+                </div>
+
+                {offices.length === 0 ? (
+                  <div className="rounded-md border p-4 text-sm text-muted-foreground">
+                    Nenhum consultório ativo encontrado. Cadastre consultórios em
+                    Configurações.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {offices.map((o) => {
+                      const selected = o.id === officeId;
+                      return (
+                        <button
+                          key={o.id}
+                          type="button"
+                          disabled={selectionDisabled}
+                          onClick={() => setOfficeId(o.id)}
+                          className={cn(
+                            "rounded-md border p-3 text-left transition",
+                            "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            selected ? "ring-2 ring-primary" : "bg-card",
+                            selectionDisabled &&
+                              "pointer-events-none select-none"
+                          )}
+                        >
+                          <div className="text-sm font-semibold text-foreground truncate">
+                            {o.name}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Mensagens de bloqueio */}
+                {selectedAppointment && !isSelectedAppointmentToday && (
+                  <div className="rounded-md border p-3 text-sm text-muted-foreground">
+                    Você só pode iniciar atendimentos agendados para <b>hoje</b>.
+                  </div>
+                )}
+                {current && (
+                  <div className="rounded-md border p-3 text-sm text-muted-foreground">
+                    Finalize o atendimento atual para iniciar outro.
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleStart}
+                  disabled={
+                    isStarting ||
+                    !user ||
+                    !!current ||
+                    !appointmentId ||
+                    !officeId ||
+                    !isSelectedAppointmentToday ||
+                    offices.length === 0 ||
+                    appointments.length === 0
+                  }
+                >
+                  {current
+                    ? "Finalize o atendimento atual"
+                    : isStarting
+                      ? "Iniciando..."
+                      : "Iniciar Atendimento"}
+                </Button>
+
+                <p className="text-xs text-muted-foreground">
+                  {medicalServicesLoaded && medicalServiceIds.length === 0
+                    ? "Nenhum serviço de consulta médica encontrado. Cadastre um serviço com nome contendo 'Consulta' em Serviços."
+                    : "O histórico do paciente fica no cadastro do Pet/Cliente."}
+                </p>
+              </section>
+            </div>
           </CardContent>
         </Card>
       </div>
