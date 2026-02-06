@@ -15,22 +15,38 @@ Deno.serve(async (req) => {
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-    const authHeader = req.headers.get('Authorization') ?? ''
+     const authHeader = req.headers.get('Authorization') ?? ''
+     if (!authHeader.startsWith('Bearer ')) {
+       return new Response(JSON.stringify({ error: 'Não autenticado' }), {
+         status: 401,
+         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+       })
+     }
 
-    // Validate user (do NOT trust client-side claims)
-    const supabaseAuthed = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    })
+     // Validate user JWT claims (signing-keys compatible)
+     const supabaseAuthed = createClient(supabaseUrl, supabaseAnonKey, {
+       global: { headers: { Authorization: authHeader } },
+     })
 
-    const { data: userData, error: userError } = await supabaseAuthed.auth.getUser()
-    if (userError || !userData?.user) {
-      return new Response(JSON.stringify({ error: 'Não autenticado' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
+     const token = authHeader.replace('Bearer ', '')
+     const { data: claimsData, error: claimsError } = await supabaseAuthed.auth.getClaims(token)
+     if (claimsError || !claimsData?.claims?.sub) {
+       return new Response(JSON.stringify({ error: 'Token inválido' }), {
+         status: 401,
+         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+       })
+     }
 
-    const user = userData.user
+     // Keep existing behavior: use getUser() to access user_metadata
+     const { data: userData, error: userError } = await supabaseAuthed.auth.getUser()
+     if (userError || !userData?.user) {
+       return new Response(JSON.stringify({ error: 'Não autenticado' }), {
+         status: 401,
+         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+       })
+     }
+
+     const user = userData.user
 
     // Service client for privileged DB writes
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)

@@ -24,23 +24,25 @@ Deno.serve(async (req) => {
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return json({ error: "Não autenticado" }, 401);
+    const authHeader = req.headers.get("Authorization") ?? "";
+    if (!authHeader.startsWith("Bearer ")) return json({ error: "Não autenticado" }, 401);
 
     // Client with end-user JWT, used only to validate the token.
     const supabaseAuthed = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: userData, error: userError } = await supabaseAuthed.auth.getUser();
-    if (userError || !userData?.user) return json({ error: "Token inválido" }, 401);
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabaseAuthed.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims?.sub) return json({ error: "Token inválido" }, 401);
+
+    const callerId = claimsData.claims.sub;
 
     // Admin client for privileged DB ops
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    const caller = userData.user;
     const { data: isAdmin, error: adminCheckError } = await supabaseAdmin.rpc("is_admin", {
-      _user_id: caller.id,
+      _user_id: callerId,
     });
 
     if (adminCheckError) throw adminCheckError;
@@ -78,7 +80,7 @@ Deno.serve(async (req) => {
           code: upper,
           cnpj,
           company_name: companyName,
-          created_by: caller.id,
+          created_by: callerId,
         })
         .select()
         .single();

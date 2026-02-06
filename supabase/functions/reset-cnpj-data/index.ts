@@ -28,10 +28,21 @@ Deno.serve(async (req) => {
     }
 
     const authHeader = req.headers.get("Authorization") ?? "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return json({ error: "Não autenticado" }, 401);
+    }
+
     const supabaseAuthed = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabaseAuthed.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims?.sub) {
+      return json({ error: "Token inválido" }, 401);
+    }
+
+    // Load full user (keeps behavior consistent)
     const { data: userData, error: userError } = await supabaseAuthed.auth.getUser();
     if (userError || !userData?.user) {
       return json({ error: "Não autenticado" }, 401);
