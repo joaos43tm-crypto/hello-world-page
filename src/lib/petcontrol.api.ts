@@ -1153,10 +1153,18 @@ export const whatsappApi = {
     const cleanPhone = phone.replace(/\D/g, "");
     const phoneWithCountry = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
 
-    // Use URL + URLSearchParams to ensure proper UTF-8/x-www-form-urlencoded encoding (better emoji compatibility)
-    const url = new URL(`https://wa.me/${phoneWithCountry}`);
-    url.searchParams.set("text", message);
+    // Encode as RFC3986 (percent-encoding) — WhatsApp links can break emojis on some platforms when using "+" encoding
+    const encodedText = encodeURIComponent(message);
 
-    window.open(url.toString(), "_blank", "noopener,noreferrer");
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const isMobile = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(ua);
+
+    // Desktop: use WhatsApp Web send endpoint (better emoji handling than wa.me in some cases)
+    // Mobile: try the whatsapp:// protocol first (opens the native app)
+    const url = isMobile
+      ? `whatsapp://send?phone=${phoneWithCountry}&text=${encodedText}`
+      : `https://web.whatsapp.com/send?phone=${phoneWithCountry}&text=${encodedText}`;
+
+    window.open(url, "_blank", "noopener,noreferrer");
   },
 };
