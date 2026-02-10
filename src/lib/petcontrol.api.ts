@@ -57,6 +57,7 @@ export interface Service {
   price: number;
   duration_minutes?: number;
   is_active?: boolean;
+  icon_key?: string;
   created_at?: string;
 }
 

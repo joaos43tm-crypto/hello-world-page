@@ -1,7 +1,8 @@
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { cn } from "@/lib/utils";
 import type { Appointment } from "@/lib/petcontrol.api";
-import { Clock, Scissors, Stethoscope, User } from "lucide-react";
+import { User } from "lucide-react";
+import { getServiceIconByKey } from "@/lib/serviceIcons";
 
 type Props = {
   appointment: Appointment;
@@ -16,15 +17,12 @@ export function AppointmentListRow({ appointment, dense }: Props) {
   const status = appointment.status ?? "agendado";
 
   const isMedicalAppointment = /consulta/i.test(serviceName);
-  const LeadingIcon = isMedicalAppointment ? Stethoscope : Clock;
+  const LeadingIcon = getServiceIconByKey(
+    appointment.service?.icon_key ?? (isMedicalAppointment ? "stethoscope" : null)
+  );
 
   return (
-    <div
-      className={cn(
-        "flex items-start gap-4 py-3",
-        dense ? "py-2" : "py-3"
-      )}
-    >
+    <div className={cn("flex items-start gap-4 py-3", dense ? "py-2" : "py-3")}>
       <div className="shrink-0 mt-0.5">
         <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center text-foreground">
           <LeadingIcon className="w-5 h-5" />
@@ -43,7 +41,7 @@ export function AppointmentListRow({ appointment, dense }: Props) {
                 <span className="truncate">{tutorName}</span>
               </div>
               <div className="flex items-center gap-2 min-w-0">
-                <Scissors className="w-4 h-4 shrink-0" />
+                <LeadingIcon className="w-4 h-4 shrink-0" />
                 <span className="truncate">{serviceName}</span>
               </div>
             </div>

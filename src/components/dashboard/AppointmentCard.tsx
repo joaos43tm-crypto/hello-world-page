@@ -1,13 +1,10 @@
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/button";
 import {
-  Dog,
   Clock,
-  Scissors,
   MessageCircle,
   ChevronRight,
   AlertTriangle,
-  Stethoscope,
 } from "lucide-react";
 import type { Appointment, AppointmentStatus } from "@/lib/petcontrol.api";
 import { whatsappApi } from "@/lib/petcontrol.api";
@@ -16,6 +13,7 @@ import {
   getDefaultWhatsAppTemplates,
   getWhatsAppTemplatesCached,
 } from "@/lib/whatsappTemplates";
+import { getServiceIconByKey } from "@/lib/serviceIcons";
 
 interface AppointmentCardProps {
   appointment: Appointment;
@@ -48,7 +46,8 @@ export function AppointmentCard({ appointment, onStatusChange, onWhatsApp }: App
 
   const isMedicalAppointment = /consulta/i.test(service?.name ?? "");
   const canAdvanceStatus = !(isMedicalAppointment && status === "agendado");
-  const PetIcon = isMedicalAppointment ? Stethoscope : Dog;
+
+  const ServiceIcon = getServiceIconByKey(service?.icon_key ?? (isMedicalAppointment ? "stethoscope" : null));
 
   const handleWhatsApp = () => {
     if (!tutor?.phone) return;
@@ -82,7 +81,7 @@ export function AppointmentCard({ appointment, onStatusChange, onWhatsApp }: App
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-accent rounded-xl flex items-center justify-center">
-            <PetIcon className="w-6 h-6 text-primary" />
+            <ServiceIcon className="w-6 h-6 text-primary" />
           </div>
           <div>
             <h3 className="font-semibold text-foreground flex items-center gap-2">
@@ -106,7 +105,7 @@ export function AppointmentCard({ appointment, onStatusChange, onWhatsApp }: App
           <span>{appointment.scheduled_time?.slice(0, 5)}</span>
         </div>
         <div className="flex items-center gap-2 text-muted-foreground">
-          <Scissors size={14} />
+          <ServiceIcon className="h-3.5 w-3.5" />
           <span>{service?.name || "Serviço"}</span>
         </div>
       </div>
