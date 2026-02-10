@@ -1150,9 +1150,13 @@ export const whatsappApi = {
   },
 
   openWhatsApp(phone: string, message: string): void {
-    const cleanPhone = phone.replace(/\D/g, '');
-    const phoneWithCountry = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
-    const encodedMessage = encodeURIComponent(message);
-    window.open(`https://wa.me/${phoneWithCountry}?text=${encodedMessage}`, '_blank');
+    const cleanPhone = phone.replace(/\D/g, "");
+    const phoneWithCountry = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
+
+    // Use URL + URLSearchParams to ensure proper UTF-8/x-www-form-urlencoded encoding (better emoji compatibility)
+    const url = new URL(`https://wa.me/${phoneWithCountry}`);
+    url.searchParams.set("text", message);
+
+    window.open(url.toString(), "_blank", "noopener,noreferrer");
   },
 };
