@@ -707,6 +707,7 @@ export type Database = {
           created_at: string | null
           description: string | null
           duration_minutes: number | null
+          icon_key: string
           id: string
           is_active: boolean | null
           name: string
@@ -716,6 +717,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           duration_minutes?: number | null
+          icon_key?: string
           id?: string
           is_active?: boolean | null
           name: string
@@ -725,6 +727,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           duration_minutes?: number | null
+          icon_key?: string
           id?: string
           is_active?: boolean | null
           name?: string

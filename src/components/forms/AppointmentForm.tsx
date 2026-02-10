@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,10 +10,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar, Clock, Save, Dog, Scissors } from "lucide-react";
+import { Calendar, Clock, Save, Dog } from "lucide-react";
 import type { Pet, Service } from "@/lib/petcontrol.api";
 import { petsApi, servicesApi } from "@/lib/petcontrol.api";
 import { isoDateInTimeZone } from "@/lib/date";
+import { getServiceIconByKey } from "@/lib/serviceIcons";
 
 interface AppointmentFormProps {
   onSave: (data: {
@@ -61,6 +62,10 @@ export function AppointmentForm({
     loadData();
   }, []);
 
+  const ServiceIcon = useMemo(() => {
+    return getServiceIconByKey(selectedService?.icon_key);
+  }, [selectedService?.icon_key]);
+
   const handleSubmit = async () => {
     if (!petId || !serviceId || !date || !time) return;
 
@@ -75,7 +80,7 @@ export function AppointmentForm({
         price: selectedService?.price,
       });
     } catch (error) {
-      console.error('Error saving appointment:', error);
+      console.error("Error saving appointment:", error);
     } finally {
       setIsLoading(false);
     }
@@ -107,7 +112,7 @@ export function AppointmentForm({
       {lockService ? (
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
-            <Scissors size={16} />
+            <ServiceIcon size={16} />
             Serviço
           </Label>
           <div className="h-12 px-3 rounded-md border bg-muted flex items-center text-sm text-foreground">
@@ -120,7 +125,7 @@ export function AppointmentForm({
       ) : (
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
-            <Scissors size={16} />
+            <ServiceIcon size={16} />
             Serviço *
           </Label>
           <Select value={serviceId} onValueChange={setServiceId}>
@@ -128,11 +133,17 @@ export function AppointmentForm({
               <SelectValue placeholder="Selecione o serviço..." />
             </SelectTrigger>
             <SelectContent>
-              {services.map((service) => (
-                <SelectItem key={service.id} value={service.id}>
-                  {service.name} - R$ {service.price.toFixed(2)}
-                </SelectItem>
-              ))}
+              {services.map((service) => {
+                const Icon = getServiceIconByKey(service.icon_key);
+                return (
+                  <SelectItem key={service.id} value={service.id}>
+                    <span className="inline-flex items-center gap-2">
+                      <Icon className="h-4 w-4" />
+                      {service.name} - R$ {service.price.toFixed(2)}
+                    </span>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>
