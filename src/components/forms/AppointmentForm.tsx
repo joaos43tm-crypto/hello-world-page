@@ -10,7 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar, Clock, Save, Dog } from "lucide-react";
+import { Calendar, Clock, Save } from "lucide-react";
+import { PetCombobox } from "@/components/forms/fields/PetCombobox";
 import type { Pet, Service } from "@/lib/petcontrol.api";
 import { petsApi, servicesApi } from "@/lib/petcontrol.api";
 import { isoDateInTimeZone } from "@/lib/date";
@@ -91,21 +92,12 @@ export function AppointmentForm({
       {/* Pet Selection */}
       <div className="space-y-2">
         <Label className="flex items-center gap-2">
-          <Dog size={16} />
-          Pet *
+          <span className="inline-flex items-center gap-2">
+            <span className="sr-only">Pet</span>
+            Pet *
+          </span>
         </Label>
-        <Select value={petId} onValueChange={setPetId}>
-          <SelectTrigger className="h-12">
-            <SelectValue placeholder="Selecione o pet..." />
-          </SelectTrigger>
-          <SelectContent>
-            {pets.map((pet) => (
-              <SelectItem key={pet.id} value={pet.id}>
-                {pet.name} - {pet.tutor?.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <PetCombobox pets={pets} value={petId} onChange={setPetId} />
       </div>
 
       {/* Service Selection */}

@@ -248,6 +248,21 @@ export type Database = {
         }
         Relationships: []
       }
+      master_admin_allowlist: {
+        Row: {
+          created_at: string
+          email: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+        }
+        Relationships: []
+      }
       medical_consultations: {
         Row: {
           appointment_id: string | null
@@ -947,6 +962,7 @@ export type Database = {
         }[]
       }
       current_user_cnpj: { Args: { _user_id: string }; Returns: string }
+      current_user_email: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -955,6 +971,17 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      is_master_email_allowed: { Args: { _email: string }; Returns: boolean }
+      list_companies_master: {
+        Args: never
+        Returns: {
+          cnpj: string
+          created_at: string
+          email: string
+          id: string
+          user_count: number
+        }[]
+      }
       use_registration_code: {
         Args: { _code: string; _user_id: string }
         Returns: boolean
