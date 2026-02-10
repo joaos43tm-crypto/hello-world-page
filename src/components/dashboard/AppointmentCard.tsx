@@ -1,12 +1,13 @@
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/button";
-import { 
-  Dog, 
-  Clock, 
+import {
+  Dog,
+  Clock,
   Scissors,
   MessageCircle,
   ChevronRight,
-  AlertTriangle
+  AlertTriangle,
+  Stethoscope,
 } from "lucide-react";
 import type { Appointment, AppointmentStatus } from "@/lib/petcontrol.api";
 import { whatsappApi } from "@/lib/petcontrol.api";
@@ -47,6 +48,7 @@ export function AppointmentCard({ appointment, onStatusChange, onWhatsApp }: App
 
   const isMedicalAppointment = /consulta/i.test(service?.name ?? "");
   const canAdvanceStatus = !(isMedicalAppointment && status === "agendado");
+  const PetIcon = isMedicalAppointment ? Stethoscope : Dog;
 
   const handleWhatsApp = () => {
     if (!tutor?.phone) return;
@@ -80,7 +82,7 @@ export function AppointmentCard({ appointment, onStatusChange, onWhatsApp }: App
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-accent rounded-xl flex items-center justify-center">
-            <Dog className="w-6 h-6 text-primary" />
+            <PetIcon className="w-6 h-6 text-primary" />
           </div>
           <div>
             <h3 className="font-semibold text-foreground flex items-center gap-2">
@@ -133,7 +135,7 @@ export function AppointmentCard({ appointment, onStatusChange, onWhatsApp }: App
             WhatsApp
           </Button>
         )}
-        
+
         {next && onStatusChange && canAdvanceStatus && (
           <Button
             size="sm"
