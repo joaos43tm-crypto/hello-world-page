@@ -497,6 +497,8 @@ export default function ConsultaMedica() {
 
       toast({ title: "Atendimento finalizado" });
       await loadCurrentConsultation();
+      // Atualiza a fila/lista de atendimentos após concluir
+      await loadUpcomingAppointments(medicalServiceIds);
     } catch (e) {
       console.error("Error finalizing consultation:", e);
       toast({
