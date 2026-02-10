@@ -22,8 +22,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { 
-  Settings, 
+import {
+  Settings,
   Store,
   Clock,
   Printer,
@@ -39,7 +39,8 @@ import {
   LogOut,
   Plus,
   Pencil,
-  Database
+  Database,
+  Stethoscope,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -58,7 +59,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 import { getDefaultWhatsAppTemplates } from "@/lib/whatsappTemplates";
-
+import { MedicalOfficesTab } from "@/components/settings/MedicalOfficesTab";
 
 interface StoreSettings {
   id: string;
@@ -100,7 +101,9 @@ const weekDays = [
 export default function Configuracoes() {
   const { toast } = useToast();
   const { profile, role, isAdmin, signOut, refreshUserData } = useAuth();
-  const [activeTab, setActiveTab] = useState<"store" | "hours" | "printer" | "features" | "users" | "data">("store");
+  const [activeTab, setActiveTab] = useState<
+    "store" | "hours" | "printer" | "features" | "offices" | "users" | "data"
+  >("store");
   const [settings, setSettings] = useState<StoreSettings | null>(null);
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -460,6 +463,7 @@ export default function Configuracoes() {
     { id: "hours", label: "Horários", icon: Clock },
     { id: "printer", label: "Impressora", icon: Printer },
     { id: "features", label: "Recursos", icon: Settings },
+    ...(isAdmin ? [{ id: "offices", label: "Consultório", icon: Stethoscope }] : []),
     ...(isAdmin ? [{ id: "users", label: "Usuários", icon: Users }] : []),
     ...(isAdmin ? [{ id: "data", label: "Dados", icon: Database }] : []),
   ];
@@ -947,6 +951,9 @@ export default function Configuracoes() {
                 )}
               </div>
             )}
+
+            {/* Offices Tab (Admin only) */}
+            {activeTab === "offices" && isAdmin && <MedicalOfficesTab />}
 
             {/* Users Tab (Admin only) */}
             {activeTab === "users" && isAdmin && (
