@@ -227,6 +227,27 @@ export type Database = {
           },
         ]
       }
+      companies: {
+        Row: {
+          cnpj: string | null
+          created_at: string
+          email: string
+          id: string
+        }
+        Insert: {
+          cnpj?: string | null
+          created_at?: string
+          email: string
+          id?: string
+        }
+        Update: {
+          cnpj?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+        }
+        Relationships: []
+      }
       medical_consultations: {
         Row: {
           appointment_id: string | null

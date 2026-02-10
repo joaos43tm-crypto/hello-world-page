@@ -1,7 +1,7 @@
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { cn } from "@/lib/utils";
 import type { Appointment } from "@/lib/petcontrol.api";
-import { Clock, Scissors, User } from "lucide-react";
+import { Clock, Scissors, Stethoscope, User } from "lucide-react";
 
 type Props = {
   appointment: Appointment;
@@ -15,6 +15,9 @@ export function AppointmentListRow({ appointment, dense }: Props) {
   const time = appointment.scheduled_time?.slice(0, 5) ?? "";
   const status = appointment.status ?? "agendado";
 
+  const isMedicalAppointment = /consulta/i.test(serviceName);
+  const LeadingIcon = isMedicalAppointment ? Stethoscope : Clock;
+
   return (
     <div
       className={cn(
@@ -24,7 +27,7 @@ export function AppointmentListRow({ appointment, dense }: Props) {
     >
       <div className="shrink-0 mt-0.5">
         <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center text-foreground">
-          <Clock className="w-5 h-5" />
+          <LeadingIcon className="w-5 h-5" />
         </div>
       </div>
 
