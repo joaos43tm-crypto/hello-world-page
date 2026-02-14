@@ -4,21 +4,34 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { CreditCard, ExternalLink, RefreshCw } from "lucide-react";
+import { CreditCard, RefreshCw } from "lucide-react";
 
 type PlanKey = "mensal" | "trimestral" | "semestral" | "anual";
 
-const plans: Array<{ key: PlanKey; label: string; period: string; lookupKey: string }> = [
-  { key: "mensal", label: "Mensal", period: "30 dias", lookupKey: "petcontrol_mensal" },
-  { key: "trimestral", label: "Trimestral", period: "93 dias", lookupKey: "petcontrol_trimestral" },
-  { key: "semestral", label: "Semestral", period: "186 dias", lookupKey: "petcontrol_semestral" },
-  { key: "anual", label: "Anual", period: "1 ano", lookupKey: "petcontrol_anual" },
+type Plan = { key: PlanKey; label: string; period: string };
+
+const plans: Plan[] = [
+  { key: "mensal", label: "Mensal", period: "30 dias" },
+  { key: "trimestral", label: "Trimestral", period: "93 dias" },
+  { key: "semestral", label: "Semestral", period: "186 dias" },
+  { key: "anual", label: "Anual", period: "1 ano" },
 ];
 
 function formatDate(iso?: string | null) {
   if (!iso) return "-";
   const d = new Date(iso);
   return d.toLocaleDateString("pt-BR");
+}
+
+function normalizePlanKey(value?: string | null): PlanKey | null {
+  if (!value) return null;
+  const v = value.trim().toLowerCase();
+  const cleaned = v.startsWith("petcontrol_") ? v.replace(/^petcontrol_/, "") : v;
+  if (cleaned === "mensal") return "mensal";
+  if (cleaned === "trimestral") return "trimestral";
+  if (cleaned === "semestral") return "semestral";
+  if (cleaned === "anual") return "anual";
+  return null;
 }
 
 export function SubscriptionTab() {
@@ -34,6 +47,16 @@ export function SubscriptionTab() {
     if (s === "VENCIDA") return { text: "VENCIDA", variant: "destructive" as const };
     return { text: "BLOQUEADA", variant: "destructive" as const };
   }, [subscription?.status]);
+
+  const currentPlanKey = useMemo(() => normalizePlanKey(subscription?.current_plan_key), [subscription?.current_plan_key]);
+  const currentPlanLabel = useMemo(() => {
+    if (!subscription) return "-";
+    if (!subscription.current_plan_key) return "Teste / sem plano";
+
+    const normalized = normalizePlanKey(subscription.current_plan_key);
+    if (!normalized) return subscription.current_plan_key;
+    return plans.find((p) => p.key === normalized)?.label ?? subscription.current_plan_key;
+  }, [subscription]);
 
   const startCheckout = async (planKey: PlanKey) => {
     if (!isAdmin) {
@@ -60,23 +83,6 @@ export function SubscriptionTab() {
     }
   };
 
-  const openPortal = async () => {
-    if (!isAdmin) {
-      toast({ title: "Apenas o administrador pode gerenciar a assinatura.", variant: "destructive" });
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase.functions.invoke("customer-portal", { body: {} });
-      if (error) throw error;
-      if (!data?.url) throw new Error("Portal não retornou URL");
-      window.open(data.url, "_blank", "noopener,noreferrer");
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Erro desconhecido";
-      toast({ title: "Erro ao abrir portal", description: message, variant: "destructive" });
-    }
-  };
-
   return (
     <div className="pet-card space-y-6 animate-fade-in">
       <div className="flex items-start justify-between gap-3">
@@ -96,9 +102,7 @@ export function SubscriptionTab() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="rounded-xl border bg-muted/30 p-4">
           <p className="text-xs text-muted-foreground">Plano atual</p>
-          <p className="mt-1 font-semibold text-foreground capitalize">
-            {subscription?.current_plan_key ? subscription.current_plan_key : "Teste / sem plano"}
-          </p>
+          <p className="mt-1 font-semibold text-foreground">{currentPlanLabel}</p>
         </div>
         <div className="rounded-xl border bg-muted/30 p-4">
           <p className="text-xs text-muted-foreground">Vencimento</p>
@@ -115,27 +119,9 @@ export function SubscriptionTab() {
         </div>
       </div>
 
-      <div className="rounded-xl border bg-muted/20 p-4">
-        <p className="text-sm text-muted-foreground">
-          Para ativar os botões de assinatura, crie no Stripe os <span className="font-medium text-foreground">Prices</span> com
-          os seguintes <span className="font-medium text-foreground">lookup_keys</span>:
-        </p>
-        <ul className="mt-3 grid gap-2 text-sm">
-          {plans.map((p) => (
-            <li key={p.key} className="flex items-center justify-between rounded-lg border bg-background px-3 py-2">
-              <span className="text-foreground">{p.label}</span>
-              <span className="font-mono text-xs text-muted-foreground">{p.lookupKey}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-foreground">Planos disponíveis</h3>
-          <Button variant="outline" onClick={openPortal} className="gap-2">
-            Gerenciar no Stripe <ExternalLink className="h-4 w-4" />
-          </Button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -146,9 +132,7 @@ export function SubscriptionTab() {
                   <p className="font-semibold text-foreground">{p.label}</p>
                   <p className="text-sm text-muted-foreground">Validade: {p.period}</p>
                 </div>
-                {subscription?.current_plan_key === p.key && (
-                  <Badge variant="secondary">Atual</Badge>
-                )}
+                {currentPlanKey === p.key && <Badge variant="secondary">Atual</Badge>}
               </div>
 
               <Button className="mt-4 w-full gap-2" onClick={() => startCheckout(p.key)}>
@@ -168,3 +152,4 @@ export function SubscriptionTab() {
     </div>
   );
 }
+
