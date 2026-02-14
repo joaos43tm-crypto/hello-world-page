@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,7 @@ import {
   Pencil,
   Database,
   Stethoscope,
+  CreditCard,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -60,6 +62,7 @@ import {
 
 import { getDefaultWhatsAppTemplates } from "@/lib/whatsappTemplates";
 import { MedicalOfficesTab } from "@/components/settings/MedicalOfficesTab";
+import { SubscriptionTab } from "@/components/subscription/SubscriptionTab";
 
 interface StoreSettings {
   id: string;
@@ -101,8 +104,9 @@ const weekDays = [
 export default function Configuracoes() {
   const { toast } = useToast();
   const { profile, role, isAdmin, signOut, refreshUserData } = useAuth();
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<
-    "store" | "hours" | "printer" | "features" | "offices" | "users" | "data"
+    "store" | "hours" | "printer" | "features" | "offices" | "users" | "data" | "assinatura"
   >("store");
   const [settings, setSettings] = useState<StoreSettings | null>(null);
   const [users, setUsers] = useState<UserWithRole[]>([]);
@@ -239,6 +243,11 @@ export default function Configuracoes() {
   useEffect(() => {
     loadSettings();
   }, [isAdmin, profile?.cnpj]);
+
+  useEffect(() => {
+    const tab = (searchParams.get("tab") || "").toLowerCase();
+    if (tab === "assinatura") setActiveTab("assinatura");
+  }, [searchParams]);
 
   useEffect(() => {
     setCrmv((profile as any)?.crmv ?? "");
@@ -463,6 +472,7 @@ export default function Configuracoes() {
     { id: "hours", label: "Horários", icon: Clock },
     { id: "printer", label: "Impressora", icon: Printer },
     { id: "features", label: "Recursos", icon: Settings },
+    ...(isAdmin ? [{ id: "assinatura", label: "Assinatura", icon: CreditCard }] : []),
     ...(isAdmin ? [{ id: "offices", label: "Consultório", icon: Stethoscope }] : []),
     ...(isAdmin ? [{ id: "users", label: "Usuários", icon: Users }] : []),
     ...(isAdmin ? [{ id: "data", label: "Dados", icon: Database }] : []),
@@ -951,6 +961,9 @@ export default function Configuracoes() {
                 )}
               </div>
             )}
+
+            {/* Offices Tab (Admin only) */}
+            {activeTab === "assinatura" && isAdmin && <SubscriptionTab />}
 
             {/* Offices Tab (Admin only) */}
             {activeTab === "offices" && isAdmin && <MedicalOfficesTab />}
