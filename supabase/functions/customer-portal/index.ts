@@ -58,16 +58,26 @@ serve(async (req) => {
     }
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-    const customers = await stripe.customers.list({ email: userData.user.email, limit: 1 });
 
-    if (!customers.data.length) {
-      return new Response(JSON.stringify({ error: "Cliente Stripe não encontrado" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Ensure a Stripe customer exists for this user.
+    const customers = await stripe.customers.list({
+      email: userData.user.email,
+      limit: 1,
+    });
+
+    let customerId = customers.data[0]?.id;
+
+    if (!customerId) {
+      logStep("Customer not found - creating", { email: userData.user.email });
+
+      const created = await stripe.customers.create({
+        email: userData.user.email,
+        name: userData.user.user_metadata?.name ?? undefined,
       });
-    }
 
-    const customerId = customers.data[0].id;
+      customerId = created.id;
+      logStep("Customer created", { customerId });
+    }
 
     const origin = req.headers.get("origin") || "http://localhost:5173";
 
