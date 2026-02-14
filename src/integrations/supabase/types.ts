@@ -248,6 +248,42 @@ export type Database = {
         }
         Relationships: []
       }
+      company_subscriptions: {
+        Row: {
+          cnpj: string
+          created_at: string
+          current_plan_key: string | null
+          status: Database["public"]["Enums"]["subscription_status"]
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          trial_started_at: string
+          updated_at: string
+          valid_until: string
+        }
+        Insert: {
+          cnpj: string
+          created_at?: string
+          current_plan_key?: string | null
+          status?: Database["public"]["Enums"]["subscription_status"]
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_started_at?: string
+          updated_at?: string
+          valid_until: string
+        }
+        Update: {
+          cnpj?: string
+          created_at?: string
+          current_plan_key?: string | null
+          status?: Database["public"]["Enums"]["subscription_status"]
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_started_at?: string
+          updated_at?: string
+          valid_until?: string
+        }
+        Relationships: []
+      }
       master_admin_allowlist: {
         Row: {
           created_at: string
@@ -816,6 +852,57 @@ export type Database = {
         }
         Relationships: []
       }
+      subscription_payments: {
+        Row: {
+          amount: number | null
+          cnpj: string
+          created_at: string
+          currency: string | null
+          id: string
+          paid_at: string
+          period_end: string | null
+          period_start: string | null
+          plan_key: string | null
+          stripe_customer_id: string | null
+          stripe_event_id: string | null
+          stripe_invoice_id: string | null
+          stripe_payment_intent_id: string | null
+          stripe_subscription_id: string | null
+        }
+        Insert: {
+          amount?: number | null
+          cnpj: string
+          created_at?: string
+          currency?: string | null
+          id?: string
+          paid_at?: string
+          period_end?: string | null
+          period_start?: string | null
+          plan_key?: string | null
+          stripe_customer_id?: string | null
+          stripe_event_id?: string | null
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_subscription_id?: string | null
+        }
+        Update: {
+          amount?: number | null
+          cnpj?: string
+          created_at?: string
+          currency?: string | null
+          id?: string
+          paid_at?: string
+          period_end?: string | null
+          period_start?: string | null
+          plan_key?: string | null
+          stripe_customer_id?: string | null
+          stripe_event_id?: string | null
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_subscription_id?: string | null
+        }
+        Relationships: []
+      }
       tutors: {
         Row: {
           address: string | null
@@ -1002,6 +1089,7 @@ export type Database = {
       cash_movement_type: "sangria" | "suprimento"
       pet_size: "pequeno" | "medio" | "grande"
       pet_temperament: "docil" | "agitado" | "agressivo" | "timido"
+      subscription_status: "ATIVO" | "A_VENCER" | "VENCIDA" | "BLOQUEADA"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1140,6 +1228,7 @@ export const Constants = {
       cash_movement_type: ["sangria", "suprimento"],
       pet_size: ["pequeno", "medio", "grande"],
       pet_temperament: ["docil", "agitado", "agressivo", "timido"],
+      subscription_status: ["ATIVO", "A_VENCER", "VENCIDA", "BLOQUEADA"],
     },
   },
 } as const
