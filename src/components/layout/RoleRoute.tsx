@@ -16,8 +16,8 @@ export function RoleRoute({ children, allow }: RoleRouteProps) {
   const location = useLocation();
   const { user, role, isLoading } = useAuth();
 
-  // Se ainda está carregando a sessão OU se temos um usuário mas o papel ainda não foi determinado
-  if (isLoading || (user && !role)) {
+  // Se ainda está carregando a sessão inicial
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -30,15 +30,19 @@ export function RoleRoute({ children, allow }: RoleRouteProps) {
     );
   }
 
+  // Se não há usuário, redireciona para login
   if (!user) {
     return <Navigate to="/auth" replace />;
   }
 
-  // Administrador sempre tem acesso total
+  // Se o papel ainda não foi carregado após o isLoading ser false, 
+  // significa que houve algum problema ou o usuário não tem papel.
+  // Administrador sempre tem acesso total.
   if (role === "administrador") {
     return <>{children}</>;
   }
 
+  // Se não tem papel ou o papel não está na lista permitida
   if (!role || !allow.includes(role as AppRole)) {
     return (
       <Navigate

@@ -67,26 +67,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn("bootstrap-user failed (non-blocking):", e);
       }
 
-      // Busca perfil
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("user_id", userId)
-        .maybeSingle();
+      // Busca perfil e papel em paralelo para ser mais rápido
+      const [profileRes, roleRes] = await Promise.all([
+        supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
+        supabase.from("user_roles").select("role").eq("user_id", userId).maybeSingle()
+      ]);
 
-      if (profileData) {
-        setProfile(profileData);
+      if (profileRes.data) {
+        setProfile(profileRes.data);
       }
 
-      // Busca papel (role)
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (roleData) {
-        setRole(roleData.role as AppRole);
+      if (roleRes.data) {
+        setRole(roleRes.data.role as AppRole);
+      } else {
+        // Se não encontrar papel, define como null explicitamente para sair do loop de carregamento
+        setRole(null);
       }
 
       await fetchSubscription();
@@ -99,17 +94,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     const initialize = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (mounted) {
-        setSession(session);
-        setUser(session?.user ?? null);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
         
-        if (session?.user) {
-          await fetchUserData(session.user.id);
+        if (mounted) {
+          setSession(session);
+          setUser(session?.user ?? null);
+          
+          if (session?.user) {
+            await fetchUserData(session.user.id);
+          }
         }
-        
-        setIsLoading(false);
+      } catch (error) {
+        console.error("Initialization error:", error);
+      } finally {
+        if (mounted) setIsLoading(false);
       }
     };
 
@@ -129,8 +128,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else {
             // Caso contrário, bloqueia o carregamento até ter os dados
             setIsLoading(true);
-            await fetchUserData(session.user.id);
-            setIsLoading(false);
+            try {
+              await fetchUserData(session.user.id);
+            } finally {
+              setIsLoading(false);
+            }
           }
         } else {
           setProfile(null);
