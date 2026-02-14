@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import type { CompanySubscription } from "@/lib/subscription";
 
 export type AppRole = "administrador" | "atendente" | "tosador" | "medico";
 
@@ -22,6 +23,8 @@ interface AuthContextType {
   role: AppRole | null;
   isAdmin: boolean;
   isLoading: boolean;
+  subscription: CompanySubscription | null;
+  refreshSubscription: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (
     email: string,
@@ -40,7 +43,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [subscription, setSubscription] = useState<CompanySubscription | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const fetchSubscription = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("subscription-status", { body: {} });
+      if (error) throw error;
+      setSubscription((data?.subscription ?? null) as CompanySubscription | null);
+    } catch (e) {
+      console.warn("subscription-status failed (non-blocking):", e);
+    }
+  };
 
   const fetchUserData = async (userId: string) => {
     try {
@@ -72,6 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (roleData) {
         setRole(roleData.role as AppRole);
       }
+
+      await fetchSubscription();
     } catch (error) {
       console.error("Error fetching user data:", error);
     }
@@ -142,6 +158,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = role === "administrador";
 
+  const refreshSubscription = async () => {
+    await fetchSubscription();
+  };
+
   const refreshUserData = async () => {
     if (!user?.id) return;
     await fetchUserData(user.id);
@@ -156,6 +176,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role,
         isAdmin,
         isLoading,
+        subscription,
+        refreshSubscription,
         signIn,
         signUp,
         signOut,
