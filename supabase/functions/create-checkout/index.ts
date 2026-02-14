@@ -8,11 +8,11 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const PRICE_LOOKUP_KEYS: Record<string, string> = {
-  mensal: "petcontrol_mensal",
-  trimestral: "petcontrol_trimestral",
-  semestral: "petcontrol_semestral",
-  anual: "petcontrol_anual",
+const PRICE_IDS: Record<string, string | undefined> = {
+  mensal: Deno.env.get("STRIPE_PRICE_ID_MENSAL"),
+  trimestral: Deno.env.get("STRIPE_PRICE_ID_TRIMESTRAL"),
+  semestral: Deno.env.get("STRIPE_PRICE_ID_SEMESTRAL"),
+  anual: Deno.env.get("STRIPE_PRICE_ID_ANUAL"),
 };
 
 const logStep = (step: string, details?: unknown) => {
@@ -93,34 +93,22 @@ serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const planKey = String(body?.plan_key ?? "").trim();
-    if (!planKey || !(planKey in PRICE_LOOKUP_KEYS)) {
+    if (!planKey || !(planKey in PRICE_IDS)) {
       return new Response(JSON.stringify({ error: "Plano inválido" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const lookupKey = PRICE_LOOKUP_KEYS[planKey];
-
-    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-
-    logStep("Looking up price by lookup_key", { lookupKey });
-
-    const prices = await stripe.prices.list({ lookup_keys: [lookupKey], active: true, limit: 1 });
-    if (!prices.data.length) {
-      return new Response(
-        JSON.stringify({
-          error:
-            `Preço não configurado no Stripe para o plano '${planKey}'. Crie um Price com lookup_key='${lookupKey}'.`,
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+    const priceId = PRICE_IDS[planKey];
+    if (!priceId) {
+      return new Response(JSON.stringify({ error: `Price ID não configurado para o plano '${planKey}'` }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const priceId = prices.data[0].id;
+    const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
     const customers = await stripe.customers.list({ email: userData.user.email, limit: 1 });
     const existingCustomer = customers.data[0];
