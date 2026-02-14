@@ -66,6 +66,31 @@ serve(async (req) => {
       });
     }
 
+    // Tenant binding (CNPJ)
+    const { data: profileData, error: profileError } = await supabaseAuthed
+      .from("profiles")
+      .select("cnpj")
+      .eq("user_id", claimsData.claims.sub)
+      .maybeSingle();
+
+    if (profileError) {
+      return new Response(JSON.stringify({ error: "Falha ao obter CNPJ do usuário" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const cnpj = String(profileData?.cnpj ?? "").trim();
+    if (!cnpj) {
+      return new Response(
+        JSON.stringify({ error: "Seu usuário está sem CNPJ no perfil. Atualize o perfil e tente novamente." }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const planKey = String(body?.plan_key ?? "").trim();
     if (!planKey || !(planKey in PRICE_LOOKUP_KEYS)) {
@@ -113,10 +138,12 @@ serve(async (req) => {
       subscription_data: {
         metadata: {
           plan_key: planKey,
+          cnpj,
         },
       },
       metadata: {
         plan_key: planKey,
+        cnpj,
       },
     });
 
