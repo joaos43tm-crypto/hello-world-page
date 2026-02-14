@@ -1,3 +1,5 @@
+"use client";
+
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
@@ -58,14 +60,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserData = async (userId: string) => {
     try {
-      // Ensure the user has a role/profile (first account becomes administrador)
+      // Garante que o usuário tenha um perfil/papel (primeira conta vira administrador)
       try {
         await supabase.functions.invoke("bootstrap-user", { body: {} });
       } catch (e) {
         console.warn("bootstrap-user failed (non-blocking):", e);
       }
 
-      // Fetch profile
+      // Busca perfil
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
@@ -76,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(profileData);
       }
 
-      // Fetch role
+      // Busca papel (role)
       const { data: roleData } = await supabase
         .from("user_roles")
         .select("role")
@@ -94,36 +96,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Set up auth state listener FIRST
+    let mounted = true;
+
+    const initialize = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (mounted) {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          await fetchUserData(session.user.id);
+        }
+        
+        setIsLoading(false);
+      }
+    };
+
+    initialize();
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
+        if (!mounted) return;
+
         setSession(session);
         setUser(session?.user ?? null);
 
-        // Defer data fetching
         if (session?.user) {
-          setTimeout(() => {
+          // Se já temos um papel e é o mesmo usuário, atualiza em background
+          if (role && user?.id === session.user.id) {
             fetchUserData(session.user.id);
-          }, 0);
+          } else {
+            // Caso contrário, bloqueia o carregamento até ter os dados
+            setIsLoading(true);
+            await fetchUserData(session.user.id);
+            setIsLoading(false);
+          }
         } else {
           setProfile(null);
           setRole(null);
+          setIsLoading(false);
         }
-        setIsLoading(false);
       }
     );
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserData(session.user.id);
-      }
-      setIsLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
