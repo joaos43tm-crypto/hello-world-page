@@ -481,10 +481,12 @@ export const appointmentsApi = {
     const currentStatus = current?.status as AppointmentStatus;
 
     // Restrições de fluxo
-    if (currentStatus === 'pago') {
+    if (currentStatus === 'pago' && status !== 'pago') {
       throw new Error('Agendamentos pagos não podem ter o status alterado.');
     }
-    if (currentStatus === 'finalizado' && status !== 'pago') {
+    
+    // Permite manter o status 'finalizado' ou mudar para 'pago' (via PDV)
+    if (currentStatus === 'finalizado' && status !== 'pago' && status !== 'finalizado') {
       throw new Error('Agendamentos finalizados só podem ser alterados para Pago.');
     }
 

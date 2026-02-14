@@ -122,7 +122,7 @@ export function MonthlyAppointmentsCalendar({
     }
   };
 
-  // Filtra opções de status baseadas no status atual (não permite voltar)
+  // Filtra opções de status baseadas no status atual (não permite voltar e remove 'pago' da seleção manual)
   const availableStatusOptions = useMemo(() => {
     if (!editingAppointment) return [];
     const current = editingAppointment.status ?? "agendado";
@@ -131,11 +131,8 @@ export function MonthlyAppointmentsCalendar({
     // Se já estiver pago, não permite mudar nada
     if (current === 'pago') return ['pago' as AppointmentStatus];
     
-    // Se estiver finalizado, só permite mudar para pago
-    if (current === 'finalizado') return ['finalizado' as AppointmentStatus, 'pago' as AppointmentStatus];
-
-    // Caso contrário, permite o status atual e qualquer um à frente
-    return statusOrder.slice(currentIndex);
+    // Caso contrário, permite o status atual e qualquer um à frente, EXCETO 'pago'
+    return statusOrder.slice(currentIndex).filter(s => s !== 'pago');
   }, [editingAppointment]);
 
   return (
@@ -305,7 +302,7 @@ export function MonthlyAppointmentsCalendar({
                   <p className="text-xs text-muted-foreground">Agendamentos pagos não podem ser alterados.</p>
                 )}
                 {editingAppointment.status === 'finalizado' && (
-                  <p className="text-xs text-muted-foreground">Agendamentos finalizados só podem ser alterados para Pago.</p>
+                  <p className="text-xs text-muted-foreground">O status 'Pago' é definido automaticamente pelo PDV.</p>
                 )}
               </div>
             </div>
