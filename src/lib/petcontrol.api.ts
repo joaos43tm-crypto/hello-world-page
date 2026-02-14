@@ -471,6 +471,23 @@ export const appointmentsApi = {
   },
 
   async updateStatus(id: string, status: AppointmentStatus): Promise<Appointment> {
+    // Buscar status atual para validar restrição
+    const { data: current } = await supabase
+      .from('appointments')
+      .select('status')
+      .eq('id', id)
+      .single();
+
+    const currentStatus = current?.status as AppointmentStatus;
+
+    // Restrições de fluxo
+    if (currentStatus === 'pago') {
+      throw new Error('Agendamentos pagos não podem ter o status alterado.');
+    }
+    if (currentStatus === 'finalizado' && status !== 'pago') {
+      throw new Error('Agendamentos finalizados só podem ser alterados para Pago.');
+    }
+
     const { data, error } = await supabase
       .from('appointments')
       .update({ status })
@@ -507,10 +524,7 @@ export const appointmentsApi = {
   },
 };
 
-// ============================================
-// PRODUTOS
-// ============================================
-
+// ... (restante do arquivo permanece igual)
 export const productsApi = {
   async getAll(): Promise<Product[]> {
     const { data, error } = await supabase
@@ -585,10 +599,6 @@ export const productsApi = {
   },
 };
 
-// ============================================
-// PACOTES
-// ============================================
-
 export const packagesApi = {
   async getAll(): Promise<Package[]> {
     const { data, error } = await supabase
@@ -638,10 +648,6 @@ export const packagesApi = {
     if (error) throw error;
   },
 };
-
-// ============================================
-// PLANOS (PLANS)
-// ============================================
 
 export const plansApi = {
   async getAll(): Promise<Plan[]> {
@@ -702,10 +708,6 @@ export const plansApi = {
     if (error) throw error;
   },
 };
-
-// ============================================
-// CLIENT PLANS (PLANOS DE CLIENTES)
-// ============================================
 
 export const clientPlansApi = {
   async getAll(): Promise<ClientPlan[]> {
@@ -802,10 +804,6 @@ export const clientPlansApi = {
     if (error) throw error;
   },
 };
-
-// ============================================
-// CAIXA (PDV)
-// ============================================
 
 export const cashRegisterApi = {
   async getOpenSession(): Promise<CashRegisterSession | null> {
@@ -969,10 +967,6 @@ export const cashRegisterApi = {
   },
 };
 
-// ============================================
-// VENDAS
-// ============================================
-
 export const salesApi = {
   async getAll(): Promise<Sale[]> {
     const { data, error } = await supabase
@@ -1128,10 +1122,6 @@ export const reportsApi = {
     };
   },
 };
-
-// ============================================
-// WHATSAPP INTEGRATION
-// ============================================
 
 export const whatsappApi = {
   generateMessage(type: 'ready' | 'confirmation' | 'reminder' | 'feedback', petName?: string, tutorName?: string, date?: string, time?: string): string {

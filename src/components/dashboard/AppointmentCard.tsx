@@ -25,7 +25,7 @@ const nextStatus: Record<AppointmentStatus, AppointmentStatus | null> = {
   agendado: "em_atendimento",
   em_atendimento: "aguardando_busca",
   aguardando_busca: "finalizado",
-  finalizado: null,
+  finalizado: null, // Pagamento é feito via PDV
   pago: null,
 };
 

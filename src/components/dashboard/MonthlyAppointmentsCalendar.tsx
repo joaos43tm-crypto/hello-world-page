@@ -44,7 +44,7 @@ const statusLabels: Record<AppointmentStatus, string> = {
   pago: "Pago",
 };
 
-const statusOptions: AppointmentStatus[] = [
+const statusOrder: AppointmentStatus[] = [
   "agendado",
   "em_atendimento",
   "aguardando_busca",
@@ -121,6 +121,22 @@ export function MonthlyAppointmentsCalendar({
       setIsSaving(false);
     }
   };
+
+  // Filtra opções de status baseadas no status atual (não permite voltar)
+  const availableStatusOptions = useMemo(() => {
+    if (!editingAppointment) return [];
+    const current = editingAppointment.status ?? "agendado";
+    const currentIndex = statusOrder.indexOf(current);
+    
+    // Se já estiver pago, não permite mudar nada
+    if (current === 'pago') return ['pago' as AppointmentStatus];
+    
+    // Se estiver finalizado, só permite mudar para pago
+    if (current === 'finalizado') return ['finalizado' as AppointmentStatus, 'pago' as AppointmentStatus];
+
+    // Caso contrário, permite o status atual e qualquer um à frente
+    return statusOrder.slice(currentIndex);
+  }, [editingAppointment]);
 
   return (
     <>
@@ -272,18 +288,25 @@ export function MonthlyAppointmentsCalendar({
                 <Select
                   value={editingStatus}
                   onValueChange={(v) => setEditingStatus(v as AppointmentStatus)}
+                  disabled={editingAppointment.status === 'pago'}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
-                    {statusOptions.map((s) => (
+                    {availableStatusOptions.map((s) => (
                       <SelectItem key={s} value={s}>
                         {statusLabels[s]}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {editingAppointment.status === 'pago' && (
+                  <p className="text-xs text-muted-foreground">Agendamentos pagos não podem ser alterados.</p>
+                )}
+                {editingAppointment.status === 'finalizado' && (
+                  <p className="text-xs text-muted-foreground">Agendamentos finalizados só podem ser alterados para Pago.</p>
+                )}
               </div>
             </div>
           )}
@@ -292,7 +315,10 @@ export function MonthlyAppointmentsCalendar({
             <Button variant="outline" onClick={closeDialog} disabled={isSaving}>
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={isSaving || !editingAppointment}>
+            <Button 
+              onClick={handleSave} 
+              disabled={isSaving || !editingAppointment || editingAppointment.status === 'pago'}
+            >
               {isSaving ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
