@@ -1,14 +1,24 @@
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { CreditCard, RefreshCw } from "lucide-react";
+import { CreditCard, RefreshCw, Ban } from "lucide-react";
 
 type PlanKey = "mensal" | "trimestral" | "semestral" | "anual";
 
 type Plan = { key: PlanKey; label: string; period: string };
+
+type PaymentRow = {
+  id: string;
+  paid_at: string;
+  amount: number | null;
+  currency: string | null;
+  plan_key: string | null;
+};
 
 const plans: Plan[] = [
   { key: "mensal", label: "Mensal", period: "30 dias" },
@@ -32,6 +42,17 @@ function normalizePlanKey(value?: string | null): PlanKey | null {
   if (cleaned === "semestral") return "semestral";
   if (cleaned === "anual") return "anual";
   return null;
+}
+
+function formatMoney(amount: number | null | undefined, currency?: string | null) {
+  if (amount === null || amount === undefined) return "-";
+  const cur = (currency || "BRL").toUpperCase();
+  try {
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: cur }).format(amount);
+  } catch {
+    // fallback
+    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(amount);
+  }
 }
 
 export function SubscriptionTab() {
@@ -58,6 +79,20 @@ export function SubscriptionTab() {
     return plans.find((p) => p.key === normalized)?.label ?? subscription.current_plan_key;
   }, [subscription]);
 
+  const paymentsQuery = useQuery({
+    queryKey: ["subscription_payments", "last5"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subscription_payments")
+        .select("id, paid_at, amount, currency, plan_key")
+        .order("paid_at", { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      return (data ?? []) as PaymentRow[];
+    },
+  });
+
   const startCheckout = async (planKey: PlanKey) => {
     if (!isAdmin) {
       toast({ title: "Apenas o administrador pode assinar um plano.", variant: "destructive" });
@@ -77,6 +112,36 @@ export function SubscriptionTab() {
       const message = e instanceof Error ? e.message : "Erro desconhecido";
       toast({
         title: "Não foi possível iniciar o checkout",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const cancelPlan = async () => {
+    if (!isAdmin) {
+      toast({ title: "Apenas o administrador pode cancelar o plano.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke("cancel-subscription", { body: {} });
+      if (error) throw error;
+
+      toast({
+        title: "Cancelamento solicitado",
+        description: "A assinatura será encerrada ao fim do período atual.",
+      });
+
+      // Atualiza status/validade no app (se já tiver sido sincronizado no backend)
+      await refreshSubscription();
+      paymentsQuery.refetch();
+
+      return data;
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erro desconhecido";
+      toast({
+        title: "Não foi possível cancelar",
         description: message,
         variant: "destructive",
       });
@@ -116,6 +181,76 @@ export function SubscriptionTab() {
             </div>
           </div>
           <CreditCard className="h-6 w-6 text-muted-foreground" />
+        </div>
+      </div>
+
+      <div className="rounded-xl border bg-muted/30 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Cancelamento</p>
+            <p className="text-sm text-muted-foreground">Cancela no fim do período atual (sem bloquear imediatamente).</p>
+          </div>
+
+          <Button variant="destructive" className="gap-2" onClick={cancelPlan} disabled={!isAdmin}>
+            <Ban className="h-4 w-4" />
+            Cancelar plano
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Últimos 5 pagamentos</h3>
+        </div>
+
+        <div className="rounded-xl border bg-background overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+                <TableHead>Plano</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paymentsQuery.isLoading && (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-sm text-muted-foreground">
+                    Carregando…
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {paymentsQuery.isError && (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-sm text-destructive">
+                    Não foi possível carregar pagamentos.
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {!paymentsQuery.isLoading && !paymentsQuery.isError && (paymentsQuery.data?.length ?? 0) === 0 && (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-sm text-muted-foreground">
+                    Nenhum pagamento encontrado.
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {paymentsQuery.data?.map((p) => {
+                const normalized = normalizePlanKey(p.plan_key);
+                const planLabel = normalized ? plans.find((x) => x.key === normalized)?.label ?? p.plan_key : p.plan_key;
+
+                return (
+                  <TableRow key={p.id}>
+                    <TableCell>{formatDate(p.paid_at)}</TableCell>
+                    <TableCell>{planLabel || "-"}</TableCell>
+                    <TableCell className="text-right">{formatMoney(p.amount, p.currency)}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         </div>
       </div>
 
