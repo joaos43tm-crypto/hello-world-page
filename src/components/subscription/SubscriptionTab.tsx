@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +59,9 @@ export function SubscriptionTab() {
   const { toast } = useToast();
   const { isAdmin, subscription, refreshSubscription } = useAuth();
 
+  const [cancelAtPeriodEnd, setCancelAtPeriodEnd] = useState<boolean>(false);
+  const [cancelPeriodEndIso, setCancelPeriodEndIso] = useState<string | null>(null);
+
   const statusLabel = useMemo(() => {
     const s = subscription?.status;
     if (!s) return { text: "-", variant: "secondary" as const };
@@ -92,6 +95,11 @@ export function SubscriptionTab() {
       return (data ?? []) as PaymentRow[];
     },
   });
+
+  const handleRefresh = async () => {
+    await refreshSubscription();
+    await paymentsQuery.refetch();
+  };
 
   const startCheckout = async (planKey: PlanKey) => {
     if (!isAdmin) {
@@ -128,14 +136,18 @@ export function SubscriptionTab() {
       const { data, error } = await supabase.functions.invoke("cancel-subscription", { body: {} });
       if (error) throw error;
 
+      const shouldCancelAtPeriodEnd = Boolean(data?.cancel_at_period_end);
+      const periodEndIso = data?.current_period_end ? new Date(data.current_period_end * 1000).toISOString() : null;
+
+      setCancelAtPeriodEnd(shouldCancelAtPeriodEnd);
+      setCancelPeriodEndIso(periodEndIso);
+
       toast({
         title: "Cancelamento solicitado",
         description: "A assinatura será encerrada ao fim do período atual.",
       });
 
-      // Atualiza status/validade no app (se já tiver sido sincronizado no backend)
-      await refreshSubscription();
-      paymentsQuery.refetch();
+      await handleRefresh();
 
       return data;
     } catch (e: unknown) {
@@ -158,7 +170,7 @@ export function SubscriptionTab() {
           </p>
         </div>
 
-        <Button variant="outline" className="gap-2" onClick={refreshSubscription}>
+        <Button variant="outline" className="gap-2" onClick={handleRefresh}>
           <RefreshCw className="h-4 w-4" />
           Atualizar
         </Button>
@@ -189,6 +201,12 @@ export function SubscriptionTab() {
           <div>
             <p className="text-sm font-semibold text-foreground">Cancelamento</p>
             <p className="text-sm text-muted-foreground">Cancela no fim do período atual (sem bloquear imediatamente).</p>
+            {cancelAtPeriodEnd && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Cancelamento agendado</span>
+                {cancelPeriodEndIso ? ` • Término em ${formatDate(cancelPeriodEndIso)}` : ""}
+              </p>
+            )}
           </div>
 
           <Button variant="destructive" className="gap-2" onClick={cancelPlan} disabled={!isAdmin}>
