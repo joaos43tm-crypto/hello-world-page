@@ -118,11 +118,16 @@ export default function Index() {
       });
       setShowNewAppointment(false);
       loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating appointment:', error);
+      const description =
+        typeof error?.message === "string" && error.message.trim()
+          ? error.message
+          : "Verifique os dados e tente novamente.";
+
       toast({
         title: "Erro ao agendar",
-        description: "Verifique os dados e tente novamente.",
+        description,
         variant: "destructive",
       });
     }
