@@ -16,6 +16,14 @@ import type { Pet, Service } from "@/lib/petcontrol.api";
 import { petsApi, servicesApi } from "@/lib/petcontrol.api";
 import { isoDateInTimeZone } from "@/lib/date";
 import { getServiceIconByKey } from "@/lib/serviceIcons";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  clampMinTimeHHMM,
+  getNowTimeHHMMInSaoPaulo,
+  getWeekdayIdInSaoPaulo,
+  isTodayInSaoPaulo,
+  normalizeTimeHHMM,
+} from "@/lib/storeHours";
 
 interface AppointmentFormProps {
   onSave: (data: {
@@ -43,6 +51,10 @@ export function AppointmentForm({
   const [services, setServices] = useState<Service[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  const [openingTime, setOpeningTime] = useState("08:00");
+  const [closingTime, setClosingTime] = useState("18:00");
+  const [workingDays, setWorkingDays] = useState<string[]>(["seg", "ter", "qua", "qui", "sex", "sab"]);
+
   const [petId, setPetId] = useState(defaultPetId || "");
   const [serviceId, setServiceId] = useState(defaultServiceId || "");
   const [date, setDate] = useState(defaultDate || isoDateInTimeZone());
@@ -53,19 +65,59 @@ export function AppointmentForm({
 
   useEffect(() => {
     const loadData = async () => {
-      const [petsData, servicesData] = await Promise.all([
+      const [petsData, servicesData, settingsRes] = await Promise.all([
         petsApi.getAll(),
         servicesApi.getActive(),
+        supabase
+          .from("store_settings")
+          .select("opening_time,closing_time,working_days")
+          .limit(1)
+          .maybeSingle(),
       ]);
+
       setPets(petsData);
       setServices(servicesData);
+
+      if (!settingsRes.error && settingsRes.data) {
+        setOpeningTime(normalizeTimeHHMM(settingsRes.data.opening_time, "08:00"));
+        setClosingTime(normalizeTimeHHMM(settingsRes.data.closing_time, "18:00"));
+        setWorkingDays(settingsRes.data.working_days ?? ["seg", "ter", "qua", "qui", "sex", "sab"]);
+      }
     };
+
     loadData();
   }, []);
 
   const ServiceIcon = useMemo(() => {
     return getServiceIconByKey(selectedService?.icon_key);
   }, [selectedService?.icon_key]);
+
+  const todayIso = isoDateInTimeZone();
+  const isTodaySelected = isTodayInSaoPaulo(date);
+  const weekdayId = useMemo(() => getWeekdayIdInSaoPaulo(date), [date]);
+  const isWorkingDay = workingDays.includes(weekdayId);
+
+  const nowHHMM = useMemo(() => getNowTimeHHMMInSaoPaulo(), [todayIso]);
+
+  const timeMin = useMemo(() => {
+    const base = openingTime;
+    if (!isTodaySelected) return base;
+    return clampMinTimeHHMM(base, nowHHMM);
+  }, [isTodaySelected, openingTime, nowHHMM]);
+
+  const timeMax = closingTime;
+
+  const isWithinHours = time >= openingTime && time <= closingTime;
+  const isNotInPast = !isTodaySelected || time >= nowHHMM;
+
+  const isFormValid =
+    !!petId &&
+    !!serviceId &&
+    !!date &&
+    !!time &&
+    isWorkingDay &&
+    isWithinHours &&
+    isNotInPast;
 
   const handleSubmit = async () => {
     if (!petId || !serviceId || !date || !time) return;
@@ -165,9 +217,24 @@ export function AppointmentForm({
           <Input
             type="time"
             value={time}
+            min={timeMin}
+            max={timeMax}
             onChange={(e) => setTime(e.target.value)}
             className="h-12"
           />
+          {!isWorkingDay ? (
+            <p className="text-xs text-muted-foreground">
+              A loja não atende neste dia (verifique em Configurações → Horários).
+            </p>
+          ) : !isWithinHours ? (
+            <p className="text-xs text-muted-foreground">
+              Horário fora do expediente ({openingTime}–{closingTime}).
+            </p>
+          ) : !isNotInPast ? (
+            <p className="text-xs text-muted-foreground">
+              Não é permitido agendar para um horário que já passou.
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -197,7 +264,7 @@ export function AppointmentForm({
       {/* Submit Button */}
       <Button
         onClick={handleSubmit}
-        disabled={!petId || !serviceId || !date || !time || isLoading}
+        disabled={!isFormValid || isLoading}
         className="w-full h-14 text-lg gap-2"
       >
         <Save size={20} />
