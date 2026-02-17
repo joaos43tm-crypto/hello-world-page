@@ -151,6 +151,7 @@ export function AppointmentForm({
           <Input
             type="date"
             value={date}
+            min={isoDateInTimeZone()}
             onChange={(e) => setDate(e.target.value)}
             className="h-12"
           />
