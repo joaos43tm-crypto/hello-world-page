@@ -122,30 +122,77 @@ serve(async (req) => {
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
+    // Preflight: valida se a Price existe neste Stripe account
+    try {
+      const price = await stripe.prices.retrieve(priceId);
+      if (!price?.active) {
+        return new Response(
+          JSON.stringify({
+            error: `A Price '${priceId}' existe no Stripe, mas está inativa. Ative-a no Stripe e tente novamente.`,
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return new Response(
+        JSON.stringify({
+          error:
+            `Price ID não encontrada no Stripe: '${priceId}'. ` +
+            `Confirme se você copiou a Price correta (price_...) do mesmo ambiente/conta do STRIPE_SECRET_KEY. ` +
+            `Detalhe: ${msg}`,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     const customers = await stripe.customers.list({ email: userData.user.email, limit: 1 });
     const existingCustomer = customers.data[0];
 
     const origin = req.headers.get("origin") || "http://localhost:5173";
 
-    const session = await stripe.checkout.sessions.create({
-      customer: existingCustomer?.id,
-      customer_email: existingCustomer?.id ? undefined : userData.user.email,
-      line_items: [{ price: priceId, quantity: 1 }],
-      mode: "subscription",
-      success_url: `${origin}/configuracoes?tab=assinatura&checkout=success`,
-      cancel_url: `${origin}/configuracoes?tab=assinatura&checkout=cancel`,
-      allow_promotion_codes: true,
-      subscription_data: {
+    let session;
+    try {
+      session = await stripe.checkout.sessions.create({
+        customer: existingCustomer?.id,
+        customer_email: existingCustomer?.id ? undefined : userData.user.email,
+        line_items: [{ price: priceId, quantity: 1 }],
+        mode: "subscription",
+        success_url: `${origin}/configuracoes?tab=assinatura&checkout=success`,
+        cancel_url: `${origin}/configuracoes?tab=assinatura&checkout=cancel`,
+        allow_promotion_codes: true,
+        subscription_data: {
+          metadata: {
+            plan_key: planKey,
+            cnpj,
+          },
+        },
         metadata: {
           plan_key: planKey,
           cnpj,
         },
-      },
-      metadata: {
-        plan_key: planKey,
-        cnpj,
-      },
-    });
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return new Response(
+        JSON.stringify({
+          error:
+            `Falha ao criar checkout no Stripe. ` +
+            `Confirme se a Price '${priceId}' é recorrente (subscription) e pertence à mesma conta do STRIPE_SECRET_KEY. ` +
+            `Detalhe: ${msg}`,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
 
     logStep("Checkout created", { sessionId: session.id });
 
