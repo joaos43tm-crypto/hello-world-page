@@ -10,7 +10,6 @@ const corsHeaders = {
 
 const PRICE_IDS: Record<string, string | undefined> = {
   mensal: Deno.env.get("STRIPE_PRICE_ID_MENSAL"),
-  trimestral: Deno.env.get("STRIPE_PRICE_ID_TRIMESTRAL"),
   semestral: Deno.env.get("STRIPE_PRICE_ID_SEMESTRAL"),
   anual: Deno.env.get("STRIPE_PRICE_ID_ANUAL"),
 };
