@@ -131,7 +131,28 @@ export function SubscriptionTab() {
         body: { plan_key: planKey },
       });
 
-      if (error) throw error;
+      if (error) {
+        const ctx = (error as any)?.context;
+        const body = ctx?.body;
+
+        let detailedMessage = error.message;
+        if (body) {
+          try {
+            const parsed = typeof body === "string" ? JSON.parse(body) : body;
+            if (parsed?.error) detailedMessage = String(parsed.error);
+          } catch {
+            // ignore JSON parse errors
+          }
+        }
+
+        toast({
+          title: "Não foi possível iniciar o checkout",
+          description: detailedMessage,
+          variant: "destructive",
+        });
+        return;
+      }
+
       if (!data?.url) throw new Error("Checkout não retornou URL");
 
       window.open(data.url, "_blank", "noopener,noreferrer");
