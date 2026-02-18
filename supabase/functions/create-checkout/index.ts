@@ -107,6 +107,19 @@ serve(async (req) => {
       });
     }
 
+    // Guard-rail: Stripe Checkout precisa de Price ID (price_...) e não Product ID (prod_...)
+    if (!priceId.startsWith("price_")) {
+      return new Response(
+        JSON.stringify({
+          error: `ID inválido para o plano '${planKey}'. Use o Price ID do Stripe (price_...), e não o Product ID (prod_...).`,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
 
     const customers = await stripe.customers.list({ email: userData.user.email, limit: 1 });
