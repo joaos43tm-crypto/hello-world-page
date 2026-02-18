@@ -8,9 +8,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { CreditCard, RefreshCw, Ban } from "lucide-react";
 
-type PlanKey = "mensal" | "trimestral" | "semestral" | "anual";
+type PlanKey = "mensal" | "semestral" | "anual";
 
-type Plan = { key: PlanKey; label: string; period: string };
+type Plan = {
+  key: PlanKey;
+  label: string;
+  period: string;
+  priceLabel: string;
+  originalPriceLabel?: string;
+  highlight?: string;
+};
 
 type PaymentRow = {
   id: string;
@@ -21,10 +28,23 @@ type PaymentRow = {
 };
 
 const plans: Plan[] = [
-  { key: "mensal", label: "Mensal", period: "30 dias" },
-  { key: "trimestral", label: "Trimestral", period: "93 dias" },
-  { key: "semestral", label: "Semestral", period: "186 dias" },
-  { key: "anual", label: "Anual", period: "1 ano" },
+  { key: "mensal", label: "Mensal", period: "30 dias", priceLabel: "R$ 49,90/mês" },
+  {
+    key: "semestral",
+    label: "Semestral",
+    period: "186 dias",
+    originalPriceLabel: "R$ 359,90",
+    priceLabel: "R$ 299,90",
+    highlight: "economize R$ 60,00",
+  },
+  {
+    key: "anual",
+    label: "Anual",
+    period: "1 ano",
+    originalPriceLabel: "R$ 718,80",
+    priceLabel: "R$ 399,90",
+    highlight: "economize R$ 318,90",
+  },
 ];
 
 function formatDate(iso?: string | null) {
@@ -38,7 +58,6 @@ function normalizePlanKey(value?: string | null): PlanKey | null {
   const v = value.trim().toLowerCase();
   const cleaned = v.startsWith("petcontrol_") ? v.replace(/^petcontrol_/, "") : v;
   if (cleaned === "mensal") return "mensal";
-  if (cleaned === "trimestral") return "trimestral";
   if (cleaned === "semestral") return "semestral";
   if (cleaned === "anual") return "anual";
   return null;
@@ -280,11 +299,20 @@ export function SubscriptionTab() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {plans.map((p) => (
             <div key={p.key} className="rounded-xl border bg-background p-4">
-              <div className="flex items-start justify-between">
-                <div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
                   <p className="font-semibold text-foreground">{p.label}</p>
                   <p className="text-sm text-muted-foreground">Validade: {p.period}</p>
+
+                  <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    {p.originalPriceLabel && (
+                      <span className="text-sm text-muted-foreground line-through">{p.originalPriceLabel}</span>
+                    )}
+                    <span className="text-lg font-semibold text-foreground">{p.priceLabel}</span>
+                    {p.highlight && <span className="text-xs text-muted-foreground">({p.highlight})</span>}
+                  </div>
                 </div>
+
                 {currentPlanKey === p.key && <Badge variant="secondary">Atual</Badge>}
               </div>
 
