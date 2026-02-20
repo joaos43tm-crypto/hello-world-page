@@ -164,6 +164,9 @@ serve(async (req) => {
         customer_email: existingCustomer?.id ? undefined : userData.user.email,
         line_items: [{ price: priceId, quantity: 1 }],
         mode: "subscription",
+        // Stripe pode falhar em algumas contas/moedas se nenhum payment method compatível estiver ativado.
+        // Forçamos cartão para evitar: "No valid payment method types for this Checkout Session".
+        payment_method_types: ["card"],
         success_url: `${origin}/configuracoes?tab=assinatura&checkout=success`,
         cancel_url: `${origin}/configuracoes?tab=assinatura&checkout=cancel`,
         allow_promotion_codes: true,
