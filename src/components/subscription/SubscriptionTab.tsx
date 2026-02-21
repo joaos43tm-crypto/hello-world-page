@@ -216,6 +216,40 @@ export function SubscriptionTab() {
         </Button>
       </div>
 
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Planos disponíveis</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {plans.map((p) => (
+            <div key={p.key} className="rounded-xl border bg-background p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground">{p.label}</p>
+                  <p className="text-sm text-muted-foreground">Validade: {p.period}</p>
+
+                  <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    {p.originalPriceLabel && (
+                      <span className="text-sm text-muted-foreground line-through">{p.originalPriceLabel}</span>
+                    )}
+                    <span className="text-lg font-semibold text-foreground">{p.priceLabel}</span>
+                    {p.highlight && <span className="text-xs text-muted-foreground">({p.highlight})</span>}
+                  </div>
+                </div>
+
+                {currentPlanKey === p.key && <Badge variant="secondary">Atual</Badge>}
+              </div>
+
+              <Button className="mt-4 w-full gap-2" onClick={() => startCheckout(p.key)}>
+                <CreditCard className="h-4 w-4" />
+                Assinar plano
+              </Button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="rounded-xl border bg-muted/30 p-4">
           <p className="text-xs text-muted-foreground">Plano atual</p>
@@ -309,40 +343,6 @@ export function SubscriptionTab() {
               })}
             </TableBody>
           </Table>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-foreground">Planos disponíveis</h3>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {plans.map((p) => (
-            <div key={p.key} className="rounded-xl border bg-background p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-semibold text-foreground">{p.label}</p>
-                  <p className="text-sm text-muted-foreground">Validade: {p.period}</p>
-
-                  <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                    {p.originalPriceLabel && (
-                      <span className="text-sm text-muted-foreground line-through">{p.originalPriceLabel}</span>
-                    )}
-                    <span className="text-lg font-semibold text-foreground">{p.priceLabel}</span>
-                    {p.highlight && <span className="text-xs text-muted-foreground">({p.highlight})</span>}
-                  </div>
-                </div>
-
-                {currentPlanKey === p.key && <Badge variant="secondary">Atual</Badge>}
-              </div>
-
-              <Button className="mt-4 w-full gap-2" onClick={() => startCheckout(p.key)}>
-                <CreditCard className="h-4 w-4" />
-                Assinar plano
-              </Button>
-            </div>
-          ))}
         </div>
       </div>
 
