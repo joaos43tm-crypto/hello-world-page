@@ -94,7 +94,7 @@ export function SubscriptionTab() {
   const currentPlanKey = useMemo(() => normalizePlanKey(subscription?.current_plan_key), [subscription?.current_plan_key]);
   const currentPlanLabel = useMemo(() => {
     if (!subscription) return "-";
-    if (!subscription.current_plan_key) return "Teste / sem plano";
+    if (!subscription.current_plan_key) return "Sem Plano";
 
     const normalized = normalizePlanKey(subscription.current_plan_key);
     if (!normalized) return subscription.current_plan_key;
