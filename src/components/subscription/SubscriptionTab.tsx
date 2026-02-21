@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import { CreditCard, RefreshCw, Ban } from "lucide-react";
 
 type PlanKey = "mensal" | "semestral" | "anual";
@@ -222,31 +223,49 @@ export function SubscriptionTab() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {plans.map((p) => (
-            <div key={p.key} className="rounded-xl border bg-background p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-semibold text-foreground">{p.label}</p>
-                  <p className="text-sm text-muted-foreground">Validade: {p.period}</p>
+          {plans.map((p) => {
+            const isCurrent = currentPlanKey === p.key;
 
-                  <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                    {p.originalPriceLabel && (
-                      <span className="text-sm text-muted-foreground line-through">{p.originalPriceLabel}</span>
-                    )}
-                    <span className="text-lg font-semibold text-foreground">{p.priceLabel}</span>
-                    {p.highlight && <span className="text-xs text-muted-foreground">({p.highlight})</span>}
+            return (
+              <div
+                key={p.key}
+                className={cn(
+                  "relative rounded-xl border bg-background p-4 transition-shadow",
+                  isCurrent && "border-primary ring-2 ring-primary/20 shadow-sm",
+                )}
+              >
+                {isCurrent && (
+                  <div className="absolute right-3 top-3">
+                    <Badge variant="default" className="shadow-sm">
+                      Atual
+                    </Badge>
                   </div>
+                )}
+
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground">{p.label}</p>
+                    <p className="text-sm text-muted-foreground">Validade: {p.period}</p>
+
+                    <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      {p.originalPriceLabel && (
+                        <span className="text-sm text-muted-foreground line-through">{p.originalPriceLabel}</span>
+                      )}
+                      <span className="text-lg font-semibold text-foreground">{p.priceLabel}</span>
+                      {p.highlight && <span className="text-xs text-muted-foreground">({p.highlight})</span>}
+                    </div>
+                  </div>
+
+                  {!isCurrent && <div className="h-7" />}
                 </div>
 
-                {currentPlanKey === p.key && <Badge variant="secondary">Atual</Badge>}
+                <Button className="mt-4 w-full gap-2" onClick={() => startCheckout(p.key)}>
+                  <CreditCard className="h-4 w-4" />
+                  Assinar plano
+                </Button>
               </div>
-
-              <Button className="mt-4 w-full gap-2" onClick={() => startCheckout(p.key)}>
-                <CreditCard className="h-4 w-4" />
-                Assinar plano
-              </Button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
