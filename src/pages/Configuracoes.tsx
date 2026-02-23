@@ -49,6 +49,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import {
+  createDefaultStoreHours,
+  normalizeStoreHours,
+  normalizeTimeHHMM,
+  type StoreHoursWeek,
+  type WeekdayId,
+} from "@/lib/storeHours";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -62,6 +69,7 @@ import {
 
 import { getDefaultWhatsAppTemplates } from "@/lib/whatsappTemplates";
 import { MedicalOfficesTab } from "@/components/settings/MedicalOfficesTab";
+import { StoreHoursEditor } from "@/components/settings/StoreHoursEditor";
 import { SubscriptionTab } from "@/components/subscription/SubscriptionTab";
 
 interface StoreSettings {
@@ -74,6 +82,7 @@ interface StoreSettings {
   opening_time?: string;
   closing_time?: string;
   working_days?: string[];
+  store_hours?: unknown;
   printer_enabled?: boolean;
   printer_type?: string;
   printer_address?: string;
@@ -91,15 +100,6 @@ interface UserWithRole {
   role: string;
 }
 
-const weekDays = [
-  { id: "seg", label: "Seg" },
-  { id: "ter", label: "Ter" },
-  { id: "qua", label: "Qua" },
-  { id: "qui", label: "Qui" },
-  { id: "sex", label: "Sex" },
-  { id: "sab", label: "Sáb" },
-  { id: "dom", label: "Dom" },
-];
 
 export default function Configuracoes() {
   const { toast } = useToast();
@@ -152,9 +152,14 @@ export default function Configuracoes() {
   const [waMsgFinalizado, setWaMsgFinalizado] = useState(waDefaults.finalizado);
   const [waMsgPago, setWaMsgPago] = useState(waDefaults.pago);
   const [instagram, setInstagram] = useState("");
+  // Legacy fields (kept for compatibility)
   const [openingTime, setOpeningTime] = useState("08:00");
   const [closingTime, setClosingTime] = useState("18:00");
   const [workingDays, setWorkingDays] = useState<string[]>(["seg", "ter", "qua", "qui", "sex", "sab"]);
+
+  const [storeHours, setStoreHours] = useState<StoreHoursWeek>(() =>
+    createDefaultStoreHours("08:00", "18:00", ["seg", "ter", "qua", "qui", "sex", "sab"]),
+  );
   const [printerEnabled, setPrinterEnabled] = useState(false);
   const [printerType, setPrinterType] = useState("bluetooth");
   const [printerAddress, setPrinterAddress] = useState("");
@@ -223,9 +228,19 @@ export default function Configuracoes() {
         setWaMsgPago(tpl.pago ?? waDefaults.pago);
 
         setInstagram(data.instagram || "");
-        setOpeningTime(data.opening_time || "08:00");
-        setClosingTime(data.closing_time || "18:00");
-        setWorkingDays(data.working_days || ["seg", "ter", "qua", "qui", "sex", "sab"]);
+
+        const legacyOpening = normalizeTimeHHMM(data.opening_time, "08:00");
+        const legacyClosing = normalizeTimeHHMM(data.closing_time, "18:00");
+        const legacyWorking = (data.working_days as WeekdayId[] | null) ?? ["seg", "ter", "qua", "qui", "sex", "sab"];
+
+        setOpeningTime(legacyOpening);
+        setClosingTime(legacyClosing);
+        setWorkingDays(legacyWorking);
+
+        setStoreHours(
+          normalizeStoreHours((data as any).store_hours, legacyOpening, legacyClosing, legacyWorking),
+        );
+
         setPrinterEnabled(data.printer_enabled || false);
         setPrinterType(data.printer_type || "bluetooth");
         setPrinterAddress(data.printer_address || "");
@@ -258,6 +273,19 @@ export default function Configuracoes() {
 
     setIsSaving(true);
     try {
+      const derivedWorkingDays = (Object.entries(storeHours)
+        .filter(([, v]) => v.enabled)
+        .map(([k]) => k) as WeekdayId[]);
+
+      // Keep legacy fields filled (used as fallback in a few places)
+      const derivedOpeningTime = derivedWorkingDays.length
+        ? derivedWorkingDays.map((d) => storeHours[d].open).sort()[0]
+        : openingTime;
+
+      const derivedClosingTime = derivedWorkingDays.length
+        ? derivedWorkingDays.map((d) => storeHours[d].close).sort().slice(-1)[0]
+        : closingTime;
+
       const { error } = await supabase
         .from("store_settings")
         .update({
@@ -274,9 +302,10 @@ export default function Configuracoes() {
             pago: waMsgPago,
           },
           instagram: instagram || null,
-          opening_time: openingTime,
-          closing_time: closingTime,
-          working_days: workingDays,
+          opening_time: derivedOpeningTime,
+          closing_time: derivedClosingTime,
+          working_days: derivedWorkingDays,
+          store_hours: storeHours as any,
           printer_enabled: printerEnabled,
           printer_type: printerType,
           printer_address: printerAddress || null,
@@ -285,6 +314,11 @@ export default function Configuracoes() {
         .eq("id", settings.id);
 
       if (error) throw error;
+
+      // keep local legacy in sync
+      setOpeningTime(derivedOpeningTime);
+      setClosingTime(derivedClosingTime);
+      setWorkingDays(derivedWorkingDays);
 
       toast({ title: "Configurações salvas!" });
     } catch (error) {
@@ -459,13 +493,6 @@ export default function Configuracoes() {
     }
   };
 
-  const toggleWorkingDay = (dayId: string) => {
-    setWorkingDays(prev => 
-      prev.includes(dayId) 
-        ? prev.filter(d => d !== dayId)
-        : [...prev, dayId]
-    );
-  };
 
   const tabs = [
     { id: "store", label: "Loja", icon: Store },
@@ -769,50 +796,9 @@ export default function Configuracoes() {
                   Horário de Funcionamento
                 </h2>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Abertura</Label>
-                    <Input
-                      type="time"
-                      value={openingTime}
-                      onChange={(e) => setOpeningTime(e.target.value)}
-                      className="h-12"
-                      disabled={!isAdmin}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Fechamento</Label>
-                    <Input
-                      type="time"
-                      value={closingTime}
-                      onChange={(e) => setClosingTime(e.target.value)}
-                      className="h-12"
-                      disabled={!isAdmin}
-                    />
-                  </div>
-                </div>
-
                 <div className="space-y-2">
-                  <Label>Dias de Funcionamento</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {weekDays.map((day) => (
-                      <button
-                        key={day.id}
-                        onClick={() => isAdmin && toggleWorkingDay(day.id)}
-                        disabled={!isAdmin}
-                        className={cn(
-                          "w-12 h-12 rounded-xl font-medium transition-colors",
-                          workingDays.includes(day.id)
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground",
-                          !isAdmin && "opacity-50 cursor-not-allowed"
-                        )}
-                      >
-                        {day.label}
-                      </button>
-                    ))}
-                  </div>
+                  <Label>Horários por dia da semana</Label>
+                  <StoreHoursEditor value={storeHours} onChange={setStoreHours} disabled={!isAdmin} />
                 </div>
 
                 {isAdmin && (
