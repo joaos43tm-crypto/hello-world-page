@@ -19,10 +19,12 @@ import { getServiceIconByKey } from "@/lib/serviceIcons";
 import { supabase } from "@/integrations/supabase/client";
 import {
   clampMinTimeHHMM,
+  getDayHours,
   getNowTimeHHMMInSaoPaulo,
   getWeekdayIdInSaoPaulo,
   isTodayInSaoPaulo,
   normalizeTimeHHMM,
+  type StoreHoursConfig,
 } from "@/lib/storeHours";
 
 interface AppointmentFormProps {
@@ -54,6 +56,7 @@ export function AppointmentForm({
   const [openingTime, setOpeningTime] = useState("08:00");
   const [closingTime, setClosingTime] = useState("18:00");
   const [workingDays, setWorkingDays] = useState<string[]>(["seg", "ter", "qua", "qui", "sex", "sab"]);
+  const [storeHours, setStoreHours] = useState<StoreHoursConfig>(null);
 
   const [petId, setPetId] = useState(defaultPetId || "");
   const [serviceId, setServiceId] = useState(defaultServiceId || "");
@@ -70,7 +73,7 @@ export function AppointmentForm({
         servicesApi.getActive(),
         supabase
           .from("store_settings")
-          .select("opening_time,closing_time,working_days")
+          .select("opening_time,closing_time,working_days,store_hours")
           .limit(1)
           .maybeSingle(),
       ]);
@@ -82,6 +85,7 @@ export function AppointmentForm({
         setOpeningTime(normalizeTimeHHMM(settingsRes.data.opening_time, "08:00"));
         setClosingTime(normalizeTimeHHMM(settingsRes.data.closing_time, "18:00"));
         setWorkingDays(settingsRes.data.working_days ?? ["seg", "ter", "qua", "qui", "sex", "sab"]);
+        setStoreHours((settingsRes.data as any).store_hours ?? null);
       }
     };
 
@@ -95,19 +99,24 @@ export function AppointmentForm({
   const todayIso = isoDateInTimeZone();
   const isTodaySelected = isTodayInSaoPaulo(date);
   const weekdayId = useMemo(() => getWeekdayIdInSaoPaulo(date), [date]);
-  const isWorkingDay = workingDays.includes(weekdayId);
+  const dayHours = useMemo(
+    () => getDayHours(storeHours, weekdayId, openingTime, closingTime, workingDays.includes(weekdayId)),
+    [storeHours, weekdayId, openingTime, closingTime, workingDays],
+  );
+
+  const isWorkingDay = dayHours.enabled;
 
   const nowHHMM = useMemo(() => getNowTimeHHMMInSaoPaulo(), [todayIso]);
 
   const timeMin = useMemo(() => {
-    const base = openingTime;
+    const base = dayHours.open;
     if (!isTodaySelected) return base;
     return clampMinTimeHHMM(base, nowHHMM);
-  }, [isTodaySelected, openingTime, nowHHMM]);
+  }, [isTodaySelected, dayHours.open, nowHHMM]);
 
-  const timeMax = closingTime;
+  const timeMax = dayHours.close;
 
-  const isWithinHours = time >= openingTime && time <= closingTime;
+  const isWithinHours = time >= dayHours.open && time <= dayHours.close;
   const isNotInPast = !isTodaySelected || time >= nowHHMM;
 
   const isFormValid =
@@ -228,7 +237,7 @@ export function AppointmentForm({
             </p>
           ) : !isWithinHours ? (
             <p className="text-xs text-muted-foreground">
-              Horário fora do expediente ({openingTime}–{closingTime}).
+              Horário fora do expediente ({dayHours.open}–{dayHours.close}).
             </p>
           ) : !isNotInPast ? (
             <p className="text-xs text-muted-foreground">
