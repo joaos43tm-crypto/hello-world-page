@@ -802,6 +802,7 @@ export type Database = {
           printer_address: string | null
           printer_enabled: boolean | null
           printer_type: string | null
+          store_hours: Json | null
           store_name: string
           updated_at: string | null
           whatsapp_number: string | null
@@ -823,6 +824,7 @@ export type Database = {
           printer_address?: string | null
           printer_enabled?: boolean | null
           printer_type?: string | null
+          store_hours?: Json | null
           store_name?: string
           updated_at?: string | null
           whatsapp_number?: string | null
@@ -844,6 +846,7 @@ export type Database = {
           printer_address?: string | null
           printer_enabled?: boolean | null
           printer_type?: string | null
+          store_hours?: Json | null
           store_name?: string
           updated_at?: string | null
           whatsapp_number?: string | null
