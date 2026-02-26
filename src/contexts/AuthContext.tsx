@@ -50,6 +50,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchSubscription = async () => {
     try {
+      // Best-effort: após checkout, sincroniza do Stripe para refletir plano/validade/pagamento mesmo sem webhook.
+      await supabase.functions.invoke("sync-subscription", { body: {} }).catch(() => null);
+
       const { data, error } = await supabase.functions.invoke("subscription-status", { body: {} });
       if (!error && data?.subscription) {
         setSubscription(data.subscription as CompanySubscription);
