@@ -96,7 +96,26 @@ serve(async (req) => {
     }
 
     const planKey = String((sub.metadata as any)?.plan_key ?? "").trim() || null;
-    const validUntilIso = new Date(sub.current_period_end * 1000).toISOString();
+
+    const periodEndSeconds = Number((sub as any)?.current_period_end);
+    if (!Number.isFinite(periodEndSeconds) || periodEndSeconds <= 0) {
+      logStep("Invalid current_period_end", { subId: sub.id, current_period_end: (sub as any)?.current_period_end });
+      return new Response(JSON.stringify({ ok: true, synced: false, reason: "missing_current_period_end" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const validUntilDate = new Date(periodEndSeconds * 1000);
+    if (Number.isNaN(validUntilDate.getTime())) {
+      logStep("Invalid validUntilDate", { subId: sub.id, periodEndSeconds });
+      return new Response(JSON.stringify({ ok: true, synced: false, reason: "invalid_valid_until" }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const validUntilIso = validUntilDate.toISOString();
     const status = computeStatus(validUntilIso);
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseService, { auth: { persistSession: false } });
@@ -152,9 +171,12 @@ serve(async (req) => {
       if (existingPaymentErr) throw new Error(`subscription_payments lookup failed: ${existingPaymentErr.message}`);
 
       if (!existingPayment || existingPayment.length === 0) {
-        const paidAt = invoice.status_transitions?.paid_at
-          ? new Date(invoice.status_transitions.paid_at * 1000).toISOString()
-          : new Date().toISOString();
+        let paidAt = new Date().toISOString();
+        const paidAtSeconds = invoice.status_transitions?.paid_at;
+        if (paidAtSeconds) {
+          const d = new Date(paidAtSeconds * 1000);
+          if (!Number.isNaN(d.getTime())) paidAt = d.toISOString();
+        }
 
         await supabaseAdmin.from("subscription_payments").insert({
           cnpj,
