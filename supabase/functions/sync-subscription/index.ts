@@ -78,6 +78,7 @@ serve(async (req) => {
     const customers = await stripe.customers.list({ email: userData.user.email, limit: 1 });
     const customer = customers.data[0];
     if (!customer?.id) {
+      logStep("No customer for email", { email: userData.user.email });
       // Sem customer => sem como sincronizar (não é erro fatal)
       return new Response(JSON.stringify({ ok: true, synced: false, reason: "no_customer" }), {
         status: 200,
@@ -85,11 +86,19 @@ serve(async (req) => {
       });
     }
 
-    // Pega assinatura ativa mais recente
-    const subs = await stripe.subscriptions.list({ customer: customer.id, status: "active", limit: 5 });
-    const sub = subs.data.sort((a, b) => (b.created ?? 0) - (a.created ?? 0))[0];
+    // Pega assinatura mais recente (ACTIVE ou TRIALING)
+    const subs = await stripe.subscriptions.list({ customer: customer.id, status: "all", limit: 10 });
+    const candidates = subs.data
+      .filter((s) => s.status === "active" || s.status === "trialing")
+      .sort((a, b) => (b.created ?? 0) - (a.created ?? 0));
+
+    const sub = candidates[0];
     if (!sub?.id) {
-      return new Response(JSON.stringify({ ok: true, synced: false, reason: "no_active_subscription" }), {
+      logStep("No active/trialing subscription", {
+        customerId: customer.id,
+        statuses: subs.data.map((s) => s.status),
+      });
+      return new Response(JSON.stringify({ ok: true, synced: false, reason: "no_active_or_trialing_subscription" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
