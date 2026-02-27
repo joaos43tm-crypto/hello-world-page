@@ -169,6 +169,7 @@ export type Database = {
       }
       client_plans: {
         Row: {
+          cnpj: string | null
           created_at: string | null
           due_date: string
           id: string
@@ -183,6 +184,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          cnpj?: string | null
           created_at?: string | null
           due_date: string
           id?: string
@@ -197,6 +199,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          cnpj?: string | null
           created_at?: string | null
           due_date?: string
           id?: string
@@ -365,6 +368,7 @@ export type Database = {
       }
       medical_offices: {
         Row: {
+          cnpj: string | null
           created_at: string
           id: string
           is_active: boolean
@@ -372,6 +376,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          cnpj?: string | null
           created_at?: string
           id?: string
           is_active?: boolean
@@ -379,6 +384,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          cnpj?: string | null
           created_at?: string
           id?: string
           is_active?: boolean
@@ -389,6 +395,7 @@ export type Database = {
       }
       packages: {
         Row: {
+          cnpj: string | null
           created_at: string | null
           description: string | null
           id: string
@@ -398,6 +405,7 @@ export type Database = {
           price: number
         }
         Insert: {
+          cnpj?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -407,6 +415,7 @@ export type Database = {
           price: number
         }
         Update: {
+          cnpj?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
@@ -481,6 +490,7 @@ export type Database = {
       }
       plans: {
         Row: {
+          cnpj: string | null
           created_at: string | null
           description: string | null
           duration_months: number
@@ -491,6 +501,7 @@ export type Database = {
           price: number
         }
         Insert: {
+          cnpj?: string | null
           created_at?: string | null
           description?: string | null
           duration_months?: number
@@ -501,6 +512,7 @@ export type Database = {
           price: number
         }
         Update: {
+          cnpj?: string | null
           created_at?: string | null
           description?: string | null
           duration_months?: number
@@ -515,6 +527,7 @@ export type Database = {
       products: {
         Row: {
           category: string | null
+          cnpj: string | null
           cost_price: number
           created_at: string | null
           description: string | null
@@ -526,6 +539,7 @@ export type Database = {
         }
         Insert: {
           category?: string | null
+          cnpj?: string | null
           cost_price?: number
           created_at?: string | null
           description?: string | null
@@ -537,6 +551,7 @@ export type Database = {
         }
         Update: {
           category?: string | null
+          cnpj?: string | null
           cost_price?: number
           created_at?: string | null
           description?: string | null
@@ -550,6 +565,7 @@ export type Database = {
       }
       professionals: {
         Row: {
+          cnpj: string | null
           created_at: string | null
           id: string
           is_active: boolean | null
@@ -558,6 +574,7 @@ export type Database = {
           specialty: string | null
         }
         Insert: {
+          cnpj?: string | null
           created_at?: string | null
           id?: string
           is_active?: boolean | null
@@ -566,6 +583,7 @@ export type Database = {
           specialty?: string | null
         }
         Update: {
+          cnpj?: string | null
           created_at?: string | null
           id?: string
           is_active?: boolean | null
@@ -758,6 +776,7 @@ export type Database = {
       }
       services: {
         Row: {
+          cnpj: string | null
           created_at: string | null
           description: string | null
           duration_minutes: number | null
@@ -768,6 +787,7 @@ export type Database = {
           price: number
         }
         Insert: {
+          cnpj?: string | null
           created_at?: string | null
           description?: string | null
           duration_minutes?: number | null
@@ -778,6 +798,7 @@ export type Database = {
           price: number
         }
         Update: {
+          cnpj?: string | null
           created_at?: string | null
           description?: string | null
           duration_minutes?: number | null
@@ -793,6 +814,7 @@ export type Database = {
         Row: {
           address: string | null
           closing_time: string | null
+          cnpj: string | null
           created_at: string | null
           email: string | null
           facebook: string | null
@@ -815,6 +837,7 @@ export type Database = {
         Insert: {
           address?: string | null
           closing_time?: string | null
+          cnpj?: string | null
           created_at?: string | null
           email?: string | null
           facebook?: string | null
@@ -837,6 +860,7 @@ export type Database = {
         Update: {
           address?: string | null
           closing_time?: string | null
+          cnpj?: string | null
           created_at?: string | null
           email?: string | null
           facebook?: string | null
