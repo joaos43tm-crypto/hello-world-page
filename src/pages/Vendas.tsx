@@ -1119,40 +1119,39 @@ export default function Vendas() {
         </div>
       </div>
 
-      {/* Atalhos fixos no rodapé (não entram na rolagem) */}
-      <div className="fixed left-0 right-0 bottom-20 md:bottom-4 z-40 pointer-events-none">
-        <div className="mx-auto max-w-7xl px-4 md:px-6">
-          <div className="pet-card pointer-events-auto">
-            <h2 className="font-semibold text-foreground mb-3">Atalhos do PDV</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F2</kbd>
-                <span className="text-muted-foreground">Ativar/desativar 2 formas de pagamento</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F9</kbd>
-                <span className="text-muted-foreground">Finalizar venda</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F6</kbd>
-                <span className="text-muted-foreground">Abrir/Fechar caixa</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F8</kbd>
-                <span className="text-muted-foreground">Limpar carrinho</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F7</kbd>
-                <span className="text-muted-foreground">Reimpressão de vendas (Relatórios)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">+</kbd>
-                <span className="text-muted-foreground">Rolar carrinho para baixo</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">-</kbd>
-                <span className="text-muted-foreground">Rolar carrinho para cima</span>
-              </div>
+      {/* Atalhos fixos no rodapé (parte do fundo, sem invadir Sidebar) */}
+      <div className="fixed left-0 right-0 bottom-16 md:bottom-0 md:left-64 z-40 bg-background border-t border-border">
+        <div className="px-4 md:px-6 py-3 pb-[calc(env(safe-area-inset-bottom)_+_0.75rem)]">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <span className="font-semibold text-foreground">Atalhos do PDV</span>
+
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F2</kbd>
+              <span className="text-muted-foreground">2 pagamentos</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F9</kbd>
+              <span className="text-muted-foreground">Finalizar</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F6</kbd>
+              <span className="text-muted-foreground">Caixa</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F8</kbd>
+              <span className="text-muted-foreground">Limpar</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F7</kbd>
+              <span className="text-muted-foreground">Relatórios</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">+</kbd>
+              <span className="text-muted-foreground">Carrinho ↓</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">-</kbd>
+              <span className="text-muted-foreground">Carrinho ↑</span>
             </div>
           </div>
         </div>
