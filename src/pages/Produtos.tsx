@@ -32,8 +32,10 @@ export default function Produtos() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [cost, setCost] = useState("0");
   const [stock, setStock] = useState("0");
   const [category, setCategory] = useState("");
+
 
   const loadProducts = async () => {
     setIsLoading(true);
@@ -55,31 +57,55 @@ export default function Produtos() {
     setName("");
     setDescription("");
     setPrice("");
+    setCost("0");
     setStock("0");
     setCategory("");
     setEditingProduct(null);
   };
+
 
   const handleEdit = (product: Product) => {
     setEditingProduct(product);
     setName(product.name);
     setDescription(product.description || "");
     setPrice(product.price.toString());
+    setCost(product.cost_price?.toString() ?? "0");
     setStock(product.stock_quantity?.toString() || "0");
     setCategory(product.category || "");
     setShowForm(true);
   };
 
+
   const handleSubmit = async () => {
     if (!name || !price) return;
+
+    const parsedPrice = parseFloat(price);
+    const parsedCost = parseFloat(cost || "0");
+    const parsedStock = parseInt(stock || "0");
+
+    if (Number.isNaN(parsedPrice) || parsedPrice < 0) {
+      toast({ title: "Preço inválido", variant: "destructive" });
+      return;
+    }
+
+    if (Number.isNaN(parsedCost) || parsedCost < 0) {
+      toast({ title: "Custo inválido", variant: "destructive" });
+      return;
+    }
+
+    if (Number.isNaN(parsedStock) || parsedStock < 0) {
+      toast({ title: "Estoque inválido", variant: "destructive" });
+      return;
+    }
 
     try {
       if (editingProduct) {
         await productsApi.update(editingProduct.id, {
           name,
           description: description || null,
-          price: parseFloat(price),
-          stock_quantity: parseInt(stock),
+          price: parsedPrice,
+          cost_price: parsedCost,
+          stock_quantity: parsedStock,
           category: category || null,
         });
         toast({ title: "Produto atualizado!" });
@@ -87,8 +113,9 @@ export default function Produtos() {
         await productsApi.create({
           name,
           description: description || null,
-          price: parseFloat(price),
-          stock_quantity: parseInt(stock),
+          price: parsedPrice,
+          cost_price: parsedCost,
+          stock_quantity: parsedStock,
           category: category || null,
         });
         toast({ title: "Produto cadastrado!" });
@@ -101,6 +128,7 @@ export default function Produtos() {
       toast({ title: "Erro ao salvar", variant: "destructive" });
     }
   };
+
 
   const handleDelete = async (id: string) => {
     if (!confirm("Deseja excluir este produto?")) return;
@@ -238,7 +266,7 @@ export default function Produtos() {
                   placeholder="Descrição do produto..."
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>Preço (R$) *</Label>
                   <Input
@@ -247,6 +275,20 @@ export default function Produtos() {
                     onChange={(e) => setPrice(e.target.value)}
                     placeholder="0.00"
                     className="h-12"
+                    min={0}
+                    step="0.01"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Custo (R$)</Label>
+                  <Input
+                    type="number"
+                    value={cost}
+                    onChange={(e) => setCost(e.target.value)}
+                    placeholder="0.00"
+                    className="h-12"
+                    min={0}
+                    step="0.01"
                   />
                 </div>
                 <div className="space-y-2">
@@ -257,9 +299,12 @@ export default function Produtos() {
                     onChange={(e) => setStock(e.target.value)}
                     placeholder="0"
                     className="h-12"
+                    min={0}
+                    step="1"
                   />
                 </div>
               </div>
+
               <Button
                 onClick={handleSubmit}
                 disabled={!name || !price}

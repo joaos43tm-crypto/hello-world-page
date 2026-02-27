@@ -7,6 +7,15 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+import {
   BarChart3,
   DollarSign,
   TrendingUp,
@@ -16,7 +25,9 @@ import {
   Calendar,
   ReceiptText,
   Wallet,
+  Package,
 } from "lucide-react";
+
 import {
   cashRegisterApi,
   reportsApi,
@@ -32,6 +43,8 @@ import { generateSaleReceiptPdf } from "@/lib/pdv/saleReceiptPdf";
 import { openAndPrintPdfBytes } from "@/lib/pdv/printPdf";
 import { generateSalesPeriodReportPdf } from "@/lib/reports/salesPeriodReportPdf";
 import { generateCashPeriodReportPdf } from "@/lib/reports/cashPeriodReportPdf";
+import { generateProductsPeriodReportPdf } from "@/lib/reports/productsPeriodReportPdf";
+
 function todayISO() {
   return new Date().toISOString().split("T")[0];
 }
@@ -39,9 +52,10 @@ function todayISO() {
 export default function Relatorios() {
   const { toast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "vendas" | "caixa">(
-    "overview"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "vendas" | "produtos" | "caixa"
+  >("overview");
+
 
   // Store
   const [storeName, setStoreName] = useState("PetControl");
@@ -75,10 +89,30 @@ export default function Relatorios() {
   const [cashSessions, setCashSessions] = useState<CashRegisterSession[]>([]);
   const [isCashLoading, setIsCashLoading] = useState(false);
   const [isPrintingCashReport, setIsPrintingCashReport] = useState(false);
+
+  // Produtos (relatório)
+  const [productsStart, setProductsStart] = useState(todayISO());
+  const [productsEnd, setProductsEnd] = useState(todayISO());
+  const [productsRank, setProductsRank] = useState<
+    Array<{
+      productId: string;
+      name: string;
+      qty: number;
+      revenue: number;
+      costUnit: number;
+      costTotal: number;
+      profit: number;
+      marginPct: number;
+    }>
+  >([]);
+  const [isProductsLoading, setIsProductsLoading] = useState(false);
+  const [isPrintingProductsReport, setIsPrintingProductsReport] = useState(false);
+
   const monthName = useMemo(() => {
     const today = new Date();
     return today.toLocaleDateString("pt-BR", { month: "long" });
   }, []);
+
 
   useEffect(() => {
     const loadStore = async () => {
@@ -151,6 +185,80 @@ export default function Relatorios() {
       setIsCashLoading(false);
     }
   };
+
+  const loadProductsReport = async () => {
+    setIsProductsLoading(true);
+    try {
+      const sales = await salesApi.getByDateRange(productsStart, productsEnd);
+      if (!sales.length) {
+        setProductsRank([]);
+        return;
+      }
+
+      // Busca itens (evita joins complexos no PostgREST)
+      const fullSales = await Promise.all(sales.map((s) => salesApi.getById(s.id)));
+
+      const map = new Map<
+        string,
+        {
+          productId: string;
+          name: string;
+          qty: number;
+          revenue: number;
+          costUnit: number;
+        }
+      >();
+
+      for (const sale of fullSales) {
+        const items = (sale?.items ?? []) as any[];
+        for (const it of items) {
+          const productId = it.product_id as string | null;
+          if (!productId) continue;
+
+          const qty = Number(it.quantity ?? 0);
+          const revenue = Number(it.subtotal ?? 0);
+          const name = (it.product?.name ?? "Produto") as string;
+          const costUnit = Number(it.product?.cost_price ?? 0);
+
+          const prev = map.get(productId);
+          if (!prev) {
+            map.set(productId, { productId, name, qty, revenue, costUnit });
+          } else {
+            prev.qty += qty;
+            prev.revenue += revenue;
+            // Mantém custo atual do cadastro (se mudou entre vendas, usamos o atual)
+            prev.costUnit = costUnit;
+            prev.name = name;
+          }
+        }
+      }
+
+      const rows = Array.from(map.values()).map((r) => {
+        const costTotal = r.qty * r.costUnit;
+        const profit = r.revenue - costTotal;
+        const marginPct = r.revenue > 0 ? profit / r.revenue : 0;
+        return {
+          productId: r.productId,
+          name: r.name,
+          qty: r.qty,
+          revenue: r.revenue,
+          costUnit: r.costUnit,
+          costTotal,
+          profit,
+          marginPct,
+        };
+      });
+
+      rows.sort((a, b) => (b.qty - a.qty) || (b.revenue - a.revenue));
+      setProductsRank(rows);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Erro ao carregar relatório de produtos", variant: "destructive" });
+    } finally {
+      setIsProductsLoading(false);
+    }
+  };
+
 
   const printSaleReceipt = async (saleId: string) => {
     try {
@@ -390,6 +498,42 @@ export default function Relatorios() {
     }
   };
 
+  const productsTotals = useMemo(() => {
+    const itemsTotal = productsRank.reduce((sum, r) => sum + Number(r.qty ?? 0), 0);
+    const revenueTotal = productsRank.reduce((sum, r) => sum + Number(r.revenue ?? 0), 0);
+    const costTotal = productsRank.reduce((sum, r) => sum + Number(r.costTotal ?? 0), 0);
+    const profitTotal = productsRank.reduce((sum, r) => sum + Number(r.profit ?? 0), 0);
+    const marginPct = revenueTotal > 0 ? profitTotal / revenueTotal : 0;
+    return { itemsTotal, revenueTotal, costTotal, profitTotal, marginPct };
+  }, [productsRank]);
+
+  const printProductsReport = async () => {
+    if (productsRank.length === 0 || isProductsLoading || isPrintingProductsReport) return;
+
+    setIsPrintingProductsReport(true);
+    try {
+      const pdfBytes = await generateProductsPeriodReportPdf({
+        storeName,
+        store: {
+          address: storeAddress,
+          whatsapp: storeWhatsapp,
+          logoUrl: storeLogoUrl,
+        },
+        period: { start: productsStart, end: productsEnd },
+        summary: productsTotals,
+        rows: productsRank,
+      });
+
+      await openAndPrintPdfBytes(pdfBytes);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Erro ao imprimir relatório de produtos", variant: "destructive" });
+    } finally {
+      setIsPrintingProductsReport(false);
+    }
+  };
+
+
   return (
     <MainLayout>
       <div className="p-4 md:p-6 space-y-6">
@@ -402,12 +546,14 @@ export default function Relatorios() {
           <p className="text-muted-foreground">Visão geral e histórico do PDV</p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
-          <TabsList className="w-full justify-start">
-            <TabsTrigger value="overview">Visão geral</TabsTrigger>
-            <TabsTrigger value="vendas">Vendas</TabsTrigger>
-            <TabsTrigger value="caixa">Caixa</TabsTrigger>
-          </TabsList>
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+            <TabsList className="w-full justify-start">
+              <TabsTrigger value="overview">Visão geral</TabsTrigger>
+              <TabsTrigger value="vendas">Vendas</TabsTrigger>
+              <TabsTrigger value="produtos">Produtos</TabsTrigger>
+              <TabsTrigger value="caixa">Caixa</TabsTrigger>
+            </TabsList>
+
 
           {/* OVERVIEW */}
           <TabsContent value="overview">
@@ -430,9 +576,10 @@ export default function Relatorios() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="pet-card">
                   <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                    <Star className="w-5 h-5 text-yellow-500" />
+                    <Star className="w-5 h-5 text-primary" />
                     Pets Mais Frequentes
                   </h2>
+
                   {isLoading ? (
                     <div className="space-y-3">
                       {[1, 2, 3].map((i) => (
@@ -649,8 +796,111 @@ export default function Relatorios() {
             </div>
           </TabsContent>
 
+          {/* PRODUTOS */}
+          <TabsContent value="produtos">
+            <div className="pet-card space-y-4">
+              <div className="flex items-center gap-2 text-foreground font-semibold">
+                <Package className="w-5 h-5 text-primary" />
+                Produtos mais vendidos
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label>De</Label>
+                  <Input type="date" value={productsStart} onChange={(e) => setProductsStart(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Até</Label>
+                  <Input type="date" value={productsEnd} onChange={(e) => setProductsEnd(e.target.value)} />
+                </div>
+                <div className="flex items-end">
+                  <Button className="w-full" onClick={loadProductsReport} disabled={isProductsLoading}>
+                    {isProductsLoading ? "Carregando..." : "Buscar"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <StatCard
+                  title="Itens vendidos"
+                  value={String(productsTotals.itemsTotal)}
+                  icon={TrendingUp}
+                  variant="primary"
+                />
+                <StatCard
+                  title="Faturamento produtos"
+                  value={`R$ ${productsTotals.revenueTotal.toFixed(2)}`}
+                  icon={DollarSign}
+                  variant="success"
+                />
+                <StatCard
+                  title="Lucro bruto estimado"
+                  value={`R$ ${productsTotals.profitTotal.toFixed(2)}`}
+                  icon={TrendingUp}
+                  variant="success"
+                />
+                <StatCard
+                  title="Margem média"
+                  value={`${(productsTotals.marginPct * 100).toFixed(1)}%`}
+                  icon={TrendingUp}
+                  variant="primary"
+                />
+              </div>
+
+              <div className="overflow-hidden rounded-xl border bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Produto</TableHead>
+                      <TableHead className="text-right">Qtd</TableHead>
+                      <TableHead className="text-right">Faturamento</TableHead>
+                      <TableHead className="text-right">Custo (un)</TableHead>
+                      <TableHead className="text-right">Custo total</TableHead>
+                      <TableHead className="text-right">Lucro</TableHead>
+                      <TableHead className="text-right">Margem</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {productsRank.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                          Nenhum produto vendido no período
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      productsRank.map((r) => (
+                        <TableRow key={r.productId}>
+                          <TableCell className="font-medium">{r.name}</TableCell>
+                          <TableCell className="text-right">{r.qty}</TableCell>
+                          <TableCell className="text-right">R$ {r.revenue.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">R$ {r.costUnit.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">R$ {r.costTotal.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">R$ {r.profit.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{(r.marginPct * 100).toFixed(1)}%</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2" />
+                <Button
+                  className="w-full gap-2"
+                  onClick={printProductsReport}
+                  disabled={productsRank.length === 0 || isProductsLoading || isPrintingProductsReport}
+                >
+                  <ReceiptText className="w-4 h-4" />
+                  {isPrintingProductsReport ? "Gerando..." : "Imprimir relatório"}
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
           {/* CAIXA */}
           <TabsContent value="caixa">
+
             <div className="pet-card space-y-4">
               <div className="flex items-center gap-2 text-foreground font-semibold">
                 <Wallet className="w-5 h-5 text-primary" />
