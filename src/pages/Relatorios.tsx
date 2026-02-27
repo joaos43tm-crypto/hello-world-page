@@ -268,6 +268,11 @@ export default function Relatorios() {
 
       const pdfBytes = await generateSalesPeriodReportPdf({
         storeName,
+        store: {
+          address: storeAddress,
+          whatsapp: storeWhatsapp,
+          logoUrl: storeLogoUrl,
+        },
         period: { start: salesStart, end: salesEnd },
         mode: salesReportMode,
         sales: reportSales,
@@ -366,6 +371,11 @@ export default function Relatorios() {
 
       const pdfBytes = await generateCashPeriodReportPdf({
         storeName,
+        store: {
+          address: storeAddress,
+          whatsapp: storeWhatsapp,
+          logoUrl: storeLogoUrl,
+        },
         period: { start: cashStart, end: cashEnd },
         sessions: sessionsForPdf,
         totals,
