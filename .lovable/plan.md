@@ -1,128 +1,74 @@
 
-Objetivo
-- Deixar a página “Consulta Médica” mais rápida e intuitiva para o médico:
-  - Ver consultas de hoje e dos próximos 3 dias.
-  - Escolher o consultório (sala) com 1 clique (cards).
-  - Selecionar um agendamento facilmente (lista agrupada por data).
-  - Só permitir “Iniciar Atendimento” para consultas do dia de hoje.
+## Objetivo
+Fazer com que **Plano atual / Vencimento / Últimos pagamentos** atualizem corretamente após o pagamento no Stripe, corrigindo a sincronização `sync-subscription`.
 
-O que existe hoje (diagnóstico rápido)
-- A tela atual (src/pages/ConsultaMedica.tsx) funciona assim:
-  - Usuário escolhe uma data manualmente (input type="date").
-  - Escolhe um agendamento em um Select (dropdown).
-  - Escolhe consultório em outro Select.
-  - Clica em “Iniciar Atendimento”.
-- A busca de agendamentos é apenas “agendado” + “service ilike %consulta%” e apenas para 1 dia (queryDate).
-- Há múltiplas queries para enriquecer (appointments -> pets -> tutors), o que deixa mais lento e mais “trabalhoso” para manter.
+## Diagnóstico (baseado nos logs + Stripe)
+- Logs da função: `"[SYNC-SUBSCRIPTION] Invalid current_period_end - {\"subId\":\"sub_1T594jR0szaLj9kg9ypthQGP\"}"`
+- No Stripe, essa assinatura existe e está **active**. Porém, pelo retorno observado, o campo **`subscription.current_period_end` está vindo ausente/indefinido** na resposta que a função está usando.
+- O `current_period_end` aparece **no item da assinatura** (`subscription.items.data[0].current_period_end`) e não necessariamente no topo, então nossa lógica atual falha e retorna `synced:false`, deixando:
+  - `company_subscriptions.current_plan_key = null`
+  - `stripe_*_id = null`
+  - `subscription_payments` vazio  
+  (confirmado pelas queries: a tabela `subscription_payments` está vazia e `company_subscriptions` está só com dados de trial).
 
-Decisão de UX (com base nas suas respostas)
-- Mostrar “Hoje + 3 dias”
-- Lista agrupada por data (Hoje, Amanhã, etc.)
-- Consultórios como cards clicáveis
-- Iniciar atendimento somente para consultas de hoje
+## Plano de correção (código)
+### 1) Ajustar `sync-subscription` para calcular validade corretamente
+No `supabase/functions/sync-subscription/index.ts`:
+- Após selecionar a assinatura `sub`, fazer um **retrieve completo**:
+  - `const fullSub = await stripe.subscriptions.retrieve(sub.id, { expand: ["items.data.price"] })`
+- Determinar `periodEndSeconds` com fallback (em ordem):
+  1. `fullSub.current_period_end` (se existir)
+  2. `fullSub.items?.data?.[0]?.current_period_end`
+  3. (fallback final) buscar invoice paga e usar `invoice.period_end`
+- Só então calcular `valid_until = new Date(periodEndSeconds * 1000).toISOString()`.
 
-Plano de implementação (frontend)
-1) Redesenhar a área “Selecionar consulta agendada” para um fluxo em 2 passos, bem visual
-   1.1) Bloco “Consultas (Hoje + 3 dias)” (lado esquerdo no desktop, topo no mobile)
-   - Substituir o Select de “Cliente/Pet” por uma lista clicável de agendamentos.
-   - Agrupar por data:
-     - Seção “Hoje” (data atual)
-     - Seção “Amanhã”
-     - Seção “Depois de amanhã”
-     - Seção “+3 dias”
-   - Cada item da lista (linha/card) deve mostrar:
-     - Hora (HH:mm) em destaque
-     - Pet e Tutor
-     - (Opcional) Observação/flag “Em andamento” caso no futuro você exiba outros status (por enquanto só “agendado”)
-   - Clique no item seleciona o appointmentId (e atualiza os “contextPetName/contextTutorName”).
-   - Exibir um estado vazio amigável quando não houver consultas no período.
+### 2) Garantir que `current_plan_key` seja preenchido mesmo sem metadata
+Hoje `planKey` vem de `sub.metadata.plan_key`, mas pode não existir.
+Implementar derivação por Price ID:
+- Pegar `const priceId = fullSub.items.data[0]?.price?.id ?? fullSub.items.data[0]?.plan?.id`
+- Mapear para:
+  - `mensal` se `priceId === STRIPE_PRICE_ID_MENSAL`
+  - `semestral` se `priceId === STRIPE_PRICE_ID_SEMESTRAL`
+  - `anual` se `priceId === STRIPE_PRICE_ID_ANUAL`
+- Se nenhum bater:
+  - manter `planKey` como metadata se existir
+  - senão salvar `current_plan_key = null` mas logar claramente que não foi possível mapear
 
-   1.2) Bloco “Escolha a sala (consultório)” (lado direito no desktop)
-   - Substituir Select por um grid de cards/botões:
-     - Cards com nome do consultório
-     - Card selecionado com borda/realce (ex.: ring-primary)
-     - Clique define officeId
-   - Se não houver consultórios ativos, mostrar aviso “Cadastre consultórios em Configurações” (ou onde fizer sentido no seu app).
+### 3) Sincronizar pagamentos de forma confiável (não depender só do `latest_invoice`)
+Hoje tentamos apenas `sub.latest_invoice`. Vamos reforçar:
+- Buscar invoices pagas vinculadas à assinatura:
+  - `stripe.invoices.list({ subscription: fullSub.id, limit: 5 })`
+- Para cada invoice `paid` (ou com `status_transitions.paid_at`), inserir em `subscription_payments` se ainda não existir (idempotente por `stripe_invoice_id`).
+- Preencher:
+  - `paid_at` via `invoice.status_transitions.paid_at`
+  - `period_start` / `period_end` via `invoice.period_start` / `invoice.period_end`
+  - `amount` via `invoice.amount_paid / 100`
 
-2) Regras de habilitação do botão “Iniciar Atendimento”
-- O botão fica desabilitado até:
-  - ter agendamento selecionado E
-  - ter consultório selecionado E
-  - não existir atendimento current em andamento
-- Regra adicional: só permitir iniciar se o agendamento for de hoje:
-  - Se o usuário clicar em uma consulta de amanhã/+2/+3:
-    - manter seleção (para “pré-visualizar” e já deixar pronto), mas mostrar aviso acima do botão:
-      - “Você só pode iniciar atendimentos agendados para hoje.”
-    - botão permanece desabilitado (ou habilita e mostra toast bloqueando; recomendado: desabilitar para ficar bem claro)
+### 4) Garantir configuração correta do JWT na Edge Function
+No `supabase/config.toml`:
+- Adicionar:
+  - `[functions.sync-subscription]`
+  - `verify_jwt = false`
+(para ficar consistente com o resto do projeto, já que a função valida JWT manualmente via `getClaims()`).
 
-3) Melhorar a performance e reduzir complexidade das queries de agendamentos
-- Trocar a estratégia de “appointments -> pets -> tutors” por 1 query com relacionamento:
-  - appointments.select("id,pet_id,scheduled_date,scheduled_time,status,service_id, pet:pets(name,tutor:tutors(name))")
-  - Filtrar:
-    - status = "agendado"
-    - scheduled_date entre [hoje .. hoje+3]
-    - service_id IN (ids de serviços contendo “consulta”)
-  - Ordenar por scheduled_date, scheduled_time
-- Manter loadMedicalServices (ilike %consulta%) como hoje, mas:
-  - Rodar 1 vez ao entrar na tela (ou cachear em state e só recarregar se necessário)
-  - Depois buscar os agendamentos do range
+### 5) Observabilidade para suporte
+Adicionar logs `logStep()` com:
+- `customer.id`, `sub.id`, `sub.status`
+- `priceId` detectado
+- `periodEndSeconds` (e de onde veio: top-level vs item vs invoice)
+- `cnpj` (sem dados sensíveis além disso)
 
-4) Ajustes de layout para “ficar fácil no dia a dia”
-- Layout responsivo em 2 colunas no desktop:
-  - Coluna esquerda: lista de consultas (scroll interno)
-  - Coluna direita: cards de consultório + CTA “Iniciar Atendimento”
-- No mobile:
-  - Primeiro lista de consultas
-  - Depois consultórios
-  - Botão “Iniciar Atendimento” pode ficar “sticky” na parte de baixo (opcional) para reduzir rolagem
-- Manter o card “Atendimento em andamento” no topo como está, mas:
-  - Quando current existir, travar a área de seleção (como já faz) e deixar visualmente claro:
-    - “Finalize o atendimento atual para iniciar outro.”
-  - A lista pode permanecer visível, porém desabilitada (ou ocultar e mostrar apenas o atendimento em andamento). Recomendação: manter visível porém desabilitada com uma camada/opacity, para o médico ainda “ver o que vem a seguir”.
+## Plano de validação (end-to-end)
+1) Abrir **Configurações → Assinatura** e clicar **Atualizar**.
+2) Confirmar no UI:
+   - “Plano atual” deixa de aparecer “Sem Plano”
+   - “Vencimento” vira ~30 dias a partir de 26/02
+   - “Últimos 5 pagamentos” mostra o pagamento (valor R$ 49,90)
+3) Se ainda falhar, checar logs da função `sync-subscription` no Supabase para ver qual fallback foi usado e se houve falha no mapeamento do Price ID.
 
-5) Pequenos refinamentos que aumentam a usabilidade (sem mudar regras)
-- Adicionar um campo de “Busca rápida” (opcional) acima da lista:
-  - Filtra por tutor/pet dentro do período carregado (client-side, sem nova query)
-- Exibir contadores por dia no cabeçalho de cada seção (ex.: “Hoje (3)”)
+## Ajuste opcional (se quisermos deixar “à prova de futuro”)
+- Se `subscription.status` vier `past_due`/`incomplete` mas houver invoice paga recente, considerar sincronizar mesmo assim (porque o usuário enxerga “pago” no Stripe). Isso é uma regra de negócio que podemos ligar/desligar via código.
 
-6) Garantir que o fluxo atual de atendimento (anotações/PDF/finalização) não seja quebrado
-- Não mexer no bloco de atendimento em andamento além de ajustes visuais.
-- “Iniciar Atendimento” continua inserindo em medical_consultations com:
-  - office_id
-  - created_by
-  - appointment_id
-  - pet_id
-- PDF e notas permanecem iguais.
-
-Arquivos que serão alterados
-- src/pages/ConsultaMedica.tsx
-  - Reestruturar UI da seleção
-  - Refatorar loadTodayAppointments para loadUpcomingAppointments (hoje..hoje+3)
-  - Ajustar a tipagem TodayAppointment para incluir scheduled_date e nomes vindos do join
-
-Opcional (se você quiser deixar mais “componente” e reutilizável)
-- Criar componentes simples em src/components/medical/ (somente se fizer sentido para manter organização):
-  - UpcomingMedicalAppointmentsList.tsx (lista agrupada)
-  - MedicalOfficePicker.tsx (cards de consultório)
-Obs: isso é opcional; dá para fazer tudo dentro da própria página mantendo legibilidade.
-
-Critérios de aceite (o que você deve conseguir fazer após a mudança)
-- Ao entrar em “Consulta Médica”:
-  - Enxergo consultas de Hoje, Amanhã, +2 e +3, agrupadas por data.
-  - Clico em uma consulta e ela fica selecionada.
-  - Clico em um consultório (card) e ele fica selecionado.
-  - Se a consulta for de hoje, o botão “Iniciar Atendimento” habilita e inicia normalmente.
-  - Se a consulta for de outro dia, o botão fica desabilitado com mensagem explicando.
-  - Se já houver atendimento em andamento, não consigo iniciar outro e a tela deixa isso óbvio.
-
-Testes (end-to-end) que faremos depois de implementar
-- Com consultas no período:
-  - Selecionar consulta de hoje + selecionar consultório + iniciar atendimento.
-  - Selecionar consulta de amanhã + selecionar consultório + confirmar que não inicia.
-- Sem consultórios ativos: ver mensagem e não permitir iniciar.
-- Com atendimento current em andamento: não permitir iniciar outro; salvar notas; gerar PDF; finalizar; depois iniciar um novo.
-- Testar no mobile: seleção com toque e rolagem confortável.
-
-Riscos/atenções
-- Timezone: continuar usando isoDateInTimeZone("America/Sao_Paulo") para “hoje” e para calcular +1/+2/+3, para não “virar o dia” errado.
-- Serviços médicos: depende do nome conter “consulta”; manter isso como regra atual.
+## Arquivos que serão alterados
+- `supabase/functions/sync-subscription/index.ts` (principal)
+- `supabase/config.toml` (adicionar bloco da função)
