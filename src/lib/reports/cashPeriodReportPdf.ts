@@ -106,10 +106,10 @@ export async function generateCashPeriodReportPdf(input: CashPeriodReportInput) 
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const pageSize: [number, number] = [595.28, 841.89]; // A4
+  const pageSize: [number, number] = [841.89, 595.28]; // A4 (paisagem)
   const marginX = 42;
-  const minY = 60;
-  const startY = 800;
+  const minY = 50;
+  const startY = 555;
 
   let page = pdfDoc.addPage(pageSize);
   let y = startY;
@@ -324,7 +324,7 @@ export async function generateCashPeriodReportPdf(input: CashPeriodReportInput) 
 
   // Footer
   ensureSpace(24);
-  const footerY = 40;
+  const footerY = 26;
   page.drawLine({
     start: { x: marginX, y: footerY + 20 },
     end: { x: width - marginX, y: footerY + 20 },
