@@ -95,16 +95,105 @@ async function tryEmbedLogo(pdfDoc: PDFDocument, logoUrl: string) {
 // Receipt-style PDF (fits thermal printers when printed in 80mm mode)
 export async function generateSaleReceiptPdf(input: SaleReceiptPdfInput) {
   const width = 226; // ~80mm in points
-  const height = 680; // enough for typical receipts; browser will paginate if needed
+  const topPad = 18;
+  const bottomPad = 18;
 
   const pdfDoc = await PDFDocument.create();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const page = pdfDoc.addPage([width, height]);
   const marginX = 12;
   const maxTextWidth = width - marginX * 2;
-  let y = height - 18;
+
+  // ===== Cabeçalho padrão BR (80mm) =====
+  const storeName = normalizeText(input.store?.name) ?? normalizeText(input.storeName) ?? "PetControl";
+  const storeAddress = normalizeText(input.store?.address);
+  const storeWhatsapp = normalizeText(input.store?.whatsapp);
+  const storeLogoUrl = normalizeText(input.store?.logoUrl);
+
+  // Tenta carregar logo ANTES para conseguir calcular a altura real do recibo
+  let embeddedLogo: Awaited<ReturnType<typeof tryEmbedLogo>> | null = null;
+  let logoDrawWidth = 0;
+  let logoDrawHeight = 0;
+
+  if (storeLogoUrl) {
+    try {
+      embeddedLogo = await tryEmbedLogo(pdfDoc, storeLogoUrl);
+      const original = embeddedLogo.scale(1);
+      logoDrawWidth = Math.min(170, maxTextWidth);
+      const scale = logoDrawWidth / original.width;
+      logoDrawHeight = original.height * scale;
+    } catch {
+      embeddedLogo = null;
+    }
+  }
+
+  const addressLines = storeAddress ? wrapText(storeAddress, font, 8, maxTextWidth) : [];
+
+  // Layout pass: soma as alturas usadas, para cortar o papel logo após o "Obrigado"
+  const measure = () => {
+    let used = topPad; // espaço superior
+
+    const takeLine = (size = 9) => {
+      used += size + 4;
+    };
+
+    const takeHr = () => {
+      used += 2; // y -= 2
+      used += 8; // y -= 8
+    };
+
+    if (embeddedLogo && logoDrawHeight > 0) {
+      used += logoDrawHeight + 10;
+    }
+
+    // Nome
+    takeLine(11);
+
+    // Endereço (linhas)
+    for (let i = 0; i < addressLines.length; i++) takeLine(8);
+
+    // WhatsApp
+    if (storeWhatsapp) takeLine(8);
+
+    takeHr();
+
+    // Título
+    takeLine(10);
+    used += 2; // y -= 2
+
+    // Meta
+    takeLine(8);
+    takeLine(8);
+    if (input.sale.customerName) takeLine(8);
+    if (input.sale.paymentMethod) takeLine(8);
+
+    takeHr();
+
+    // Itens
+    takeLine(9);
+    for (const item of input.items) {
+      // linha do nome do item
+      takeLine(8);
+      // linha do preço
+      takeLine(8);
+      used += 2;
+    }
+
+    takeHr();
+
+    // Total + obrigado
+    takeLine(11);
+    used += 6;
+    takeLine(8);
+
+    used += bottomPad;
+    return Math.max(240, Math.ceil(used));
+  };
+
+  const height = measure();
+  const page = pdfDoc.addPage([width, height]);
+  let y = height - topPad;
 
   const draw = (
     text: string,
@@ -143,37 +232,21 @@ export async function generateSaleReceiptPdf(input: SaleReceiptPdfInput) {
     y -= 8;
   };
 
-  // ===== Cabeçalho padrão BR (80mm) =====
-  const storeName = normalizeText(input.store?.name) ?? normalizeText(input.storeName) ?? "PetControl";
-  const storeAddress = normalizeText(input.store?.address);
-  const storeWhatsapp = normalizeText(input.store?.whatsapp);
-  const storeLogoUrl = normalizeText(input.store?.logoUrl);
-
-  if (storeLogoUrl) {
-    try {
-      const logo = await tryEmbedLogo(pdfDoc, storeLogoUrl);
-      const original = logo.scale(1);
-      const desiredWidth = Math.min(170, maxTextWidth);
-      const scale = desiredWidth / original.width;
-      const logoH = original.height * scale;
-
-      // desenha com topo em y, e decrementa
-      page.drawImage(logo, {
-        x: (width - desiredWidth) / 2,
-        y: y - logoH,
-        width: desiredWidth,
-        height: logoH,
-      });
-      y -= logoH + 10;
-    } catch {
-      // best-effort: segue sem logo
-    }
+  if (embeddedLogo && logoDrawHeight > 0 && logoDrawWidth > 0) {
+    // desenha com topo em y, e decrementa
+    page.drawImage(embeddedLogo, {
+      x: (width - logoDrawWidth) / 2,
+      y: y - logoDrawHeight,
+      width: logoDrawWidth,
+      height: logoDrawHeight,
+    });
+    y -= logoDrawHeight + 10;
   }
 
   draw(storeName.toUpperCase(), { bold: true, size: 11, center: true });
 
   if (storeAddress) {
-    for (const line of wrapText(storeAddress, font, 8, maxTextWidth)) {
+    for (const line of addressLines) {
       draw(line, { size: 8, color: rgb(0.35, 0.35, 0.35), center: true });
     }
   }
