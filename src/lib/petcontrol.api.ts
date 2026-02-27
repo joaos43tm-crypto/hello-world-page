@@ -82,11 +82,13 @@ export interface Product {
   name: string;
   description?: string | null;
   price: number;
+  cost_price?: number | null;
   stock_quantity?: number;
   category?: string | null;
   is_active?: boolean;
   created_at?: string;
 }
+
 
 export interface Package {
   id: string;
