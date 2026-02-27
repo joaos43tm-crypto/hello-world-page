@@ -43,6 +43,9 @@ export default function Relatorios() {
 
   // Store
   const [storeName, setStoreName] = useState("PetControl");
+  const [storeAddress, setStoreAddress] = useState<string | null>(null);
+  const [storeWhatsapp, setStoreWhatsapp] = useState<string | null>(null);
+  const [storeLogoUrl, setStoreLogoUrl] = useState<string | null>(null);
 
   // Overview
   const [dailyRevenue, setDailyRevenue] = useState(0);
@@ -75,13 +78,19 @@ export default function Relatorios() {
     const loadStore = async () => {
       try {
         const { data } = await supabase
-          .from("store_settings_public")
-          .select("store_name")
+          .from("store_settings")
+          .select("store_name, address, whatsapp_number, logo_url")
           .limit(1)
           .maybeSingle();
         setStoreName(data?.store_name || "PetControl");
+        setStoreAddress((data as any)?.address ?? null);
+        setStoreWhatsapp((data as any)?.whatsapp_number ?? null);
+        setStoreLogoUrl((data as any)?.logo_url ?? null);
       } catch {
         setStoreName("PetControl");
+        setStoreAddress(null);
+        setStoreWhatsapp(null);
+        setStoreLogoUrl(null);
       }
     };
 
@@ -152,6 +161,12 @@ export default function Relatorios() {
 
       const pdfBytes = await generateSaleReceiptPdf({
         storeName,
+        store: {
+          name: storeName,
+          address: storeAddress,
+          whatsapp: storeWhatsapp,
+          logoUrl: storeLogoUrl,
+        },
         sale: {
           id: sale.id,
           createdAt: sale.created_at,

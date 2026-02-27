@@ -144,6 +144,11 @@ export default function Configuracoes() {
   const [storeEmail, setStoreEmail] = useState("");
   const [storeAddress, setStoreAddress] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
+
+  // Logo
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+
   // WhatsApp message templates (per appointment status)
   const waDefaults = getDefaultWhatsAppTemplates();
   const [waMsgAgendado, setWaMsgAgendado] = useState(waDefaults.agendado);
@@ -268,6 +273,74 @@ export default function Configuracoes() {
     setCrmv((profile as any)?.crmv ?? "");
   }, [profile?.id]);
 
+  const handleUploadLogo = async () => {
+    if (!isAdmin) return;
+    if (!settings?.id) return;
+    if (!profile?.cnpj) {
+      toast({ title: "Empresa não configurada", description: "Seu usuário não tem CNPJ vinculado.", variant: "destructive" });
+      return;
+    }
+    if (!logoFile) {
+      toast({ title: "Selecione um arquivo", variant: "destructive" });
+      return;
+    }
+
+    const allowed = ["image/png", "image/jpeg", "image/webp"];
+    if (!allowed.includes(logoFile.type)) {
+      toast({ title: "Formato inválido", description: "Envie PNG, JPG ou WEBP.", variant: "destructive" });
+      return;
+    }
+
+    setIsUploadingLogo(true);
+    try {
+      const ext = logoFile.type === "image/png" ? "png" : logoFile.type === "image/webp" ? "webp" : "jpg";
+      const path = `${profile.cnpj}/logo.${ext}`;
+
+      const { error: upErr } = await supabase.storage
+        .from("store-assets")
+        .upload(path, logoFile, { upsert: true, contentType: logoFile.type });
+      if (upErr) throw upErr;
+
+      const { data: pub } = supabase.storage.from("store-assets").getPublicUrl(path);
+      const publicUrl = pub?.publicUrl || null;
+
+      const { error: dbErr } = await supabase
+        .from("store_settings")
+        .update({ logo_url: publicUrl })
+        .eq("id", settings.id);
+      if (dbErr) throw dbErr;
+
+      setSettings((prev) => (prev ? { ...prev, logo_url: publicUrl || undefined } : prev));
+      setLogoFile(null);
+      toast({ title: "Logo enviado!" });
+    } catch (e: unknown) {
+      console.error("Error uploading logo:", e);
+      toast({ title: "Erro ao enviar logo", description: e instanceof Error ? e.message : "Erro desconhecido", variant: "destructive" });
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    if (!isAdmin) return;
+    if (!settings?.id) return;
+
+    setIsUploadingLogo(true);
+    try {
+      const { error } = await supabase.from("store_settings").update({ logo_url: null }).eq("id", settings.id);
+      if (error) throw error;
+
+      setSettings((prev) => (prev ? { ...prev, logo_url: undefined } : prev));
+      setLogoFile(null);
+      toast({ title: "Logo removido" });
+    } catch (e: unknown) {
+      console.error("Error removing logo:", e);
+      toast({ title: "Erro ao remover logo", description: e instanceof Error ? e.message : "Erro desconhecido", variant: "destructive" });
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!settings?.id || !isAdmin) return;
 
@@ -294,6 +367,7 @@ export default function Configuracoes() {
           email: storeEmail || null,
           address: storeAddress || null,
           whatsapp_number: whatsapp || null,
+          logo_url: settings.logo_url ?? null,
           whatsapp_templates: {
             agendado: waMsgAgendado,
             em_atendimento: waMsgEmAtendimento,
@@ -630,20 +704,68 @@ export default function Configuracoes() {
                   Dados da Loja
                 </h2>
 
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Store size={14} />
-                      Nome da Loja
-                    </Label>
-                    <Input
-                      value={storeName}
-                      onChange={(e) => setStoreName(e.target.value)}
-                      placeholder="Nome do pet shop"
-                      className="h-12"
-                      disabled={!isAdmin}
-                    />
-                  </div>
+                 <div className="space-y-4">
+                   <div className="space-y-2">
+                     <Label className="flex items-center gap-2">
+                       <Store size={14} />
+                       Nome da Loja
+                     </Label>
+                     <Input
+                       value={storeName}
+                       onChange={(e) => setStoreName(e.target.value)}
+                       placeholder="Nome do pet shop"
+                       className="h-12"
+                       disabled={!isAdmin}
+                     />
+                   </div>
+
+                   <div className="space-y-2">
+                     <Label className="flex items-center gap-2">
+                       <Image size={14} />
+                       Logo da Loja
+                     </Label>
+
+                     {settings?.logo_url ? (
+                       <div className="flex items-center gap-3">
+                         <img
+                           src={settings.logo_url}
+                           alt="Logo da loja"
+                           className="h-12 w-12 rounded-md border border-border object-contain bg-background"
+                           loading="lazy"
+                         />
+                         <div className="flex-1">
+                           <p className="text-xs text-muted-foreground">A logo aparece no recibo.</p>
+                         </div>
+                         <Button
+                           type="button"
+                           variant="outline"
+                           onClick={handleRemoveLogo}
+                           disabled={!isAdmin || isUploadingLogo}
+                         >
+                           Remover
+                         </Button>
+                       </div>
+                     ) : (
+                       <p className="text-xs text-muted-foreground">Nenhuma logo enviada.</p>
+                     )}
+
+                     <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 items-end">
+                       <Input
+                         type="file"
+                         accept="image/png,image/jpeg,image/webp"
+                         disabled={!isAdmin || isUploadingLogo}
+                         onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+                       />
+                       <Button
+                         type="button"
+                         onClick={handleUploadLogo}
+                         disabled={!isAdmin || isUploadingLogo || !logoFile}
+                         className="gap-2"
+                       >
+                         {isUploadingLogo ? "Enviando..." : "Enviar logo"}
+                       </Button>
+                     </div>
+                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
