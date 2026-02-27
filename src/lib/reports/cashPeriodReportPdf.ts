@@ -19,6 +19,11 @@ export type CashPeriodReportSession = {
 
 export type CashPeriodReportInput = {
   storeName: string;
+  store?: {
+    address?: string | null;
+    whatsapp?: string | null;
+    logoUrl?: string | null;
+  };
   period: { start: string; end: string };
   sessions: CashPeriodReportSession[];
   totals: {
@@ -35,6 +40,46 @@ export type CashPeriodReportInput = {
 
 function money(v: number) {
   return `R$ ${Number(v ?? 0).toFixed(2)}`;
+}
+
+function normalizeText(v?: string | null) {
+  const t = (v ?? "").trim();
+  return t.length ? t : null;
+}
+
+function getExtFromUrl(url: string) {
+  try {
+    const u = new URL(url);
+    const path = u.pathname.toLowerCase();
+    if (path.endsWith(".png")) return "png";
+    if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "jpg";
+    if (path.endsWith(".webp")) return "webp";
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+async function tryEmbedLogo(pdfDoc: PDFDocument, logoUrl: string) {
+  const res = await fetch(logoUrl);
+  if (!res.ok) throw new Error(`logo fetch failed: ${res.status}`);
+
+  const contentType = (res.headers.get("content-type") || "").toLowerCase();
+  const bytes = await res.arrayBuffer();
+
+  if (contentType.includes("png") || getExtFromUrl(logoUrl) === "png") {
+    return await pdfDoc.embedPng(bytes);
+  }
+
+  if (contentType.includes("jpeg") || contentType.includes("jpg") || getExtFromUrl(logoUrl) === "jpg") {
+    return await pdfDoc.embedJpg(bytes);
+  }
+
+  try {
+    return await pdfDoc.embedPng(bytes);
+  } catch {
+    return await pdfDoc.embedJpg(bytes);
+  }
 }
 
 function wrapText(text: string, font: any, size: number, maxWidth: number) {
@@ -133,8 +178,62 @@ export async function generateCashPeriodReportPdf(input: CashPeriodReportInput) 
   };
 
   // ===== Header =====
-  drawText(input.storeName || "PetControl", { bold: true, size: 18 });
+  const storeName = normalizeText(input.storeName) ?? "PetControl";
+  const storeAddress = normalizeText(input.store?.address);
+  const storeWhatsapp = normalizeText(input.store?.whatsapp);
+  const storeLogoUrl = normalizeText(input.store?.logoUrl);
+
+  let embeddedLogo: Awaited<ReturnType<typeof tryEmbedLogo>> | null = null;
+  let logoW = 0;
+  let logoH = 0;
+
+  if (storeLogoUrl) {
+    try {
+      embeddedLogo = await tryEmbedLogo(pdfDoc, storeLogoUrl);
+      const original = embeddedLogo.scale(1);
+      logoW = 56;
+      const scale = logoW / original.width;
+      logoH = original.height * scale;
+    } catch {
+      embeddedLogo = null;
+    }
+  }
+
+  if (embeddedLogo && logoH > 0) {
+    page.drawImage(embeddedLogo, {
+      x: marginX,
+      y: y - logoH,
+      width: logoW,
+      height: logoH,
+    });
+
+    const nameX = marginX + logoW + 12;
+    page.drawText(storeName, {
+      x: nameX,
+      y: y - 4,
+      size: 18,
+      font: fontBold,
+      color: rgb(0.12, 0.12, 0.12),
+      maxWidth: width - nameX - marginX,
+    });
+
+    y -= Math.max(logoH, 24) + 8;
+  } else {
+    drawText(storeName, { bold: true, size: 18 });
+  }
+
   drawText("Relatório de Caixa", { bold: true, size: 14 });
+
+  if (storeAddress) {
+    const lines = wrapText(storeAddress, font, 10, contentWidth);
+    for (const line of lines.slice(0, 2)) {
+      drawText(line, { size: 10, color: rgb(0.35, 0.35, 0.35) });
+    }
+  }
+  if (storeWhatsapp) {
+    drawText(`WhatsApp: ${storeWhatsapp}`, { size: 10, color: rgb(0.35, 0.35, 0.35) });
+  }
+
   drawText(`Período: ${input.period.start} a ${input.period.end}`, { size: 10, color: rgb(0.35, 0.35, 0.35) });
   drawText(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, { size: 10, color: rgb(0.35, 0.35, 0.35) });
   drawLine();
