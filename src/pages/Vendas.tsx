@@ -1,4 +1,5 @@
 import { useMemo, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,12 +96,14 @@ function parseMoneyInput(raw: string) {
 }
 
 export default function Vendas() {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [finalizedAppointments, setFinalizedAppointments] = useState<Appointment[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
 
-  // Pagamento (dividido em 2 formas)
+  // Pagamento
+  const [useTwoPayments, setUseTwoPayments] = useState(false);
   const [payment1Method, setPayment1Method] = useState("dinheiro");
   const [payment1AmountText, setPayment1AmountText] = useState("0,00");
   const [payment2Method, setPayment2Method] = useState("pix");
@@ -121,6 +124,9 @@ export default function Vendas() {
 
   const [printerEnabled, setPrinterEnabled] = useState(false);
   const [storeName, setStoreName] = useState("PetControl");
+  const [storeAddress, setStoreAddress] = useState<string | null>(null);
+  const [storeWhatsapp, setStoreWhatsapp] = useState<string | null>(null);
+  const [storeLogoUrl, setStoreLogoUrl] = useState<string | null>(null);
 
   const [openingBalanceText, setOpeningBalanceText] = useState("0,00");
   const [movementAmountText, setMovementAmountText] = useState("0,00");
@@ -136,9 +142,10 @@ export default function Vendas() {
     [cart]
   );
 
-  // Inicializa o split quando o carrinho começa (sem sobrescrever edição do usuário)
+  // Inicializa o split ao mudar carrinho/total
   useEffect(() => {
     if (cart.length === 0) {
+      setUseTwoPayments(false);
       setPayment1Method("dinheiro");
       setPayment2Method("pix");
       setPayment1AmountText("0,00");
@@ -146,7 +153,13 @@ export default function Vendas() {
       return;
     }
 
-    // Se ambos estiverem zerados, preenche tudo no método 1
+    if (!useTwoPayments) {
+      if (total > 0) setPayment1AmountText(formatMoneyBRL(total));
+      setPayment2AmountText("0,00");
+      return;
+    }
+
+    // Se ambos estiverem zerados, preenche tudo no método 1 (sugestão)
     const a1 = parseMoneyInput(payment1AmountText);
     const a2 = parseMoneyInput(payment2AmountText);
     if (a1 === 0 && a2 === 0 && total > 0) {
@@ -154,28 +167,37 @@ export default function Vendas() {
       setPayment2AmountText("0,00");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cart.length, total]);
+  }, [cart.length, total, useTwoPayments]);
 
   const payment1Amount = useMemo(() => parseMoneyInput(payment1AmountText), [payment1AmountText]);
   const payment2Amount = useMemo(() => parseMoneyInput(payment2AmountText), [payment2AmountText]);
 
   const paymentSplitError = useMemo(() => {
     if (cart.length === 0) return null;
+
+    if (!useTwoPayments) {
+      if (payment1Amount < 0) return "Valores de pagamento não podem ser negativos.";
+      const diff = Math.abs(payment1Amount - total);
+      if (diff > 0.009) return "A forma de pagamento precisa bater exatamente o total.";
+      return null;
+    }
+
     if (payment1Method === payment2Method) return "Escolha 2 formas de pagamento diferentes.";
     if (payment1Amount < 0 || payment2Amount < 0) return "Valores de pagamento não podem ser negativos.";
 
     // Comparação com tolerância para arredondamento
-    const diff = Math.abs((payment1Amount + payment2Amount) - total);
+    const diff = Math.abs(payment1Amount + payment2Amount - total);
     if (diff > 0.009) return "A soma das 2 formas precisa bater exatamente o total.";
     return null;
-  }, [cart.length, payment1Amount, payment1Method, payment2Amount, payment2Method, total]);
+  }, [cart.length, payment1Amount, payment1Method, payment2Amount, payment2Method, total, useTwoPayments]);
 
   const paymentMethodSummary = useMemo(() => {
+    if (!useTwoPayments) return formatPaymentSummary(payment1Method, payment1Amount);
     return `${formatPaymentSummary(payment1Method, payment1Amount)} + ${formatPaymentSummary(
       payment2Method,
       payment2Amount
     )}`;
-  }, [payment1Amount, payment1Method, payment2Amount, payment2Method]);
+  }, [payment1Amount, payment1Method, payment2Amount, payment2Method, useTwoPayments]);
 
   const handlePrintReceiptPreview = async () => {
     if (cart.length === 0) return;
@@ -191,6 +213,12 @@ export default function Vendas() {
     try {
       const receiptBytes = await generateSaleReceiptPdf({
         storeName,
+        store: {
+          name: storeName,
+          address: storeAddress,
+          whatsapp: storeWhatsapp,
+          logoUrl: storeLogoUrl,
+        },
         sale: {
           id: "PREVIEW",
           createdAt: new Date().toISOString(),
@@ -222,6 +250,12 @@ export default function Vendas() {
     try {
       const receiptBytes = await generateSaleReceiptPdf({
         storeName,
+        store: {
+          name: storeName,
+          address: storeAddress,
+          whatsapp: storeWhatsapp,
+          logoUrl: storeLogoUrl,
+        },
         sale: {
           id: "REPRINT",
           createdAt: lastReceipt.createdAt,
@@ -267,15 +301,21 @@ export default function Vendas() {
       try {
         const { data, error } = await supabase
           .from("store_settings")
-          .select("store_name, printer_enabled")
+          .select("store_name, address, whatsapp_number, logo_url, printer_enabled")
           .limit(1)
           .maybeSingle();
         if (error) throw error;
         setStoreName(data?.store_name || "PetControl");
+        setStoreAddress((data as any)?.address ?? null);
+        setStoreWhatsapp((data as any)?.whatsapp_number ?? null);
+        setStoreLogoUrl((data as any)?.logo_url ?? null);
         setPrinterEnabled(!!data?.printer_enabled);
       } catch (e) {
         // fallback silencioso
         setStoreName("PetControl");
+        setStoreAddress(null);
+        setStoreWhatsapp(null);
+        setStoreLogoUrl(null);
         setPrinterEnabled(false);
       }
     };
@@ -306,6 +346,7 @@ export default function Vendas() {
     loadPrinter();
     loadCash();
   }, [toast]);
+
 
   const addProductToCart = (product: Product) => {
     const existingIndex = cart.findIndex((c) => c.type === "product" && c.productId === product.id);
@@ -586,6 +627,12 @@ export default function Vendas() {
       if (printerEnabled) {
         const receiptBytes = await generateSaleReceiptPdf({
           storeName,
+          store: {
+            name: storeName,
+            address: storeAddress,
+            whatsapp: storeWhatsapp,
+            logoUrl: storeLogoUrl,
+          },
           sale: {
             id: created.id,
             createdAt: created.created_at || receiptPayload.createdAt,
@@ -625,13 +672,73 @@ export default function Vendas() {
     }
   };
 
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) return;
+
+      if (e.key === "F2") {
+        e.preventDefault();
+        setUseTwoPayments((prev) => {
+          const next = !prev;
+          if (!next) {
+            // Auto 100% no 1º
+            setPayment1AmountText(formatMoneyBRL(total));
+            setPayment2AmountText("0,00");
+          } else {
+            // Ao ativar, mantém método 2 default (pix) e valor sugerido 0
+            setPayment2Method((m) => m || "pix");
+          }
+          return next;
+        });
+        return;
+      }
+
+      if (e.key === "F9") {
+        e.preventDefault();
+        if (!isProcessing && canSell && cart.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-floating-promises
+          handleFinalizeSale();
+        }
+        return;
+      }
+
+      if (e.key === "F6") {
+        e.preventDefault();
+        if (cashSession) setCloseCashDialog(true);
+        else setOpenCashDialog(true);
+        return;
+      }
+
+      if (e.key === "F8") {
+        e.preventDefault();
+        if (!isProcessing) setCart([]);
+        return;
+      }
+
+      if (e.key === "F7") {
+        e.preventDefault();
+        navigate("/relatorios");
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [canSell, cart.length, cashSession, handleFinalizeSale, isProcessing, navigate, total]);
+
   if (showSuccess) {
     return (
       <MainLayout>
         <div className="flex items-center justify-center min-h-[80vh] p-4">
           <div className="text-center animate-scale-in">
-            <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 className="w-12 h-12 text-green-600" />
+            <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+              <CheckCircle2 className="w-12 h-12 text-primary" />
             </div>
             <h2 className="text-2xl font-bold text-foreground mb-2">
               Venda Finalizada!
@@ -907,7 +1014,12 @@ export default function Vendas() {
               <>
                 {/* Payment Split */}
                 <div className="space-y-3 mb-4">
-                  <Label>Formas de Pagamento (2)</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>Formas de Pagamento</Label>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                      {useTwoPayments ? "2" : "1"}
+                    </span>
+                  </div>
 
                   <div className="grid grid-cols-1 gap-3">
                     <div className="grid grid-cols-5 gap-2 items-end">
@@ -938,37 +1050,37 @@ export default function Vendas() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-5 gap-2 items-end">
-                      <div className="col-span-3">
-                        <Label className="text-xs text-muted-foreground">Forma 2</Label>
-                        <Select value={payment2Method} onValueChange={setPayment2Method}>
-                          <SelectTrigger disabled={!canSell}>
-                            <SelectValue placeholder="Selecionar..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {paymentMethods.map((m) => (
-                              <SelectItem key={m.id} value={m.id}>
-                                {m.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    {useTwoPayments && (
+                      <div className="grid grid-cols-5 gap-2 items-end">
+                        <div className="col-span-3">
+                          <Label className="text-xs text-muted-foreground">Forma 2</Label>
+                          <Select value={payment2Method} onValueChange={setPayment2Method}>
+                            <SelectTrigger disabled={!canSell}>
+                              <SelectValue placeholder="Selecionar..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {paymentMethods.map((m) => (
+                                <SelectItem key={m.id} value={m.id}>
+                                  {m.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                      <div className="col-span-2">
-                        <Label className="text-xs text-muted-foreground">Valor</Label>
-                        <Input
-                          value={payment2AmountText}
-                          onChange={(e) => setPayment2AmountText(e.target.value)}
-                          placeholder="0,00"
-                          disabled={!canSell}
-                        />
+                        <div className="col-span-2">
+                          <Label className="text-xs text-muted-foreground">Valor</Label>
+                          <Input
+                            value={payment2AmountText}
+                            onChange={(e) => setPayment2AmountText(e.target.value)}
+                            placeholder="0,00"
+                            disabled={!canSell}
+                          />
+                        </div>
                       </div>
-                    </div>
-
-                    {paymentSplitError && (
-                      <p className="text-sm text-destructive">{paymentSplitError}</p>
                     )}
+
+                    {paymentSplitError && <p className="text-sm text-destructive">{paymentSplitError}</p>}
                   </div>
                 </div>
 
@@ -1005,6 +1117,32 @@ export default function Vendas() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+
+        <div className="pet-card">
+          <h2 className="font-semibold text-foreground mb-3">Atalhos do PDV</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F2</kbd>
+              <span className="text-muted-foreground">Ativar/desativar 2 formas de pagamento</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F9</kbd>
+              <span className="text-muted-foreground">Finalizar venda</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F6</kbd>
+              <span className="text-muted-foreground">Abrir/Fechar caixa</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F8</kbd>
+              <span className="text-muted-foreground">Limpar carrinho</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F7</kbd>
+              <span className="text-muted-foreground">Reimpressão de vendas (Relatórios)</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1143,7 +1281,9 @@ export default function Vendas() {
               <p className="text-sm font-medium text-foreground">Pagamento</p>
               <div className="rounded-md border border-border p-3 space-y-1">
                 <p className="text-sm text-foreground">{formatPaymentSummary(payment1Method, payment1Amount)}</p>
-                <p className="text-sm text-foreground">{formatPaymentSummary(payment2Method, payment2Amount)}</p>
+                {useTwoPayments && (
+                  <p className="text-sm text-foreground">{formatPaymentSummary(payment2Method, payment2Amount)}</p>
+                )}
                 {paymentSplitError && <p className="text-sm text-destructive">{paymentSplitError}</p>}
               </div>
             </div>
