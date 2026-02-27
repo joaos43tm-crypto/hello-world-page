@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from "react";
+import { useMemo, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
@@ -101,6 +101,8 @@ export default function Vendas() {
   const [products, setProducts] = useState<Product[]>([]);
   const [finalizedAppointments, setFinalizedAppointments] = useState<Appointment[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+
+  const cartScrollRef = useRef<HTMLDivElement | null>(null);
 
   // Pagamento
   const [useTwoPayments, setUseTwoPayments] = useState(false);
@@ -683,6 +685,12 @@ export default function Vendas() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isEditableTarget(e.target)) return;
 
+      const scrollCartBy = (deltaY: number) => {
+        const el = cartScrollRef.current;
+        if (!el) return;
+        el.scrollBy({ top: deltaY, behavior: "smooth" });
+      };
+
       if (e.key === "F2") {
         e.preventDefault();
         setUseTwoPayments((prev) => {
@@ -697,6 +705,18 @@ export default function Vendas() {
           }
           return next;
         });
+        return;
+      }
+
+      if (e.key === "+" || e.code === "NumpadAdd") {
+        e.preventDefault();
+        scrollCartBy(160);
+        return;
+      }
+
+      if (e.key === "-" || e.code === "NumpadSubtract") {
+        e.preventDefault();
+        scrollCartBy(-160);
         return;
       }
 
@@ -768,7 +788,7 @@ export default function Vendas() {
 
   return (
     <MainLayout>
-      <div className="p-4 md:p-6 space-y-6">
+      <div className="p-4 md:p-6 flex flex-col gap-6 h-[calc(100dvh-5rem)] md:h-[calc(100dvh-2rem)] overflow-hidden pb-44 md:pb-32">
         {/* Header */}
         <div className="flex items-start md:items-center justify-between gap-4 flex-col md:flex-row">
           <div>
@@ -848,28 +868,23 @@ export default function Vendas() {
 
         {forceCloseBecauseDate && (
           <div className="pet-card border border-destructive/30">
-            <p className="text-foreground font-medium">
-              Existe um caixa aberto de dia anterior.
-            </p>
+            <p className="text-foreground font-medium">Existe um caixa aberto de dia anterior.</p>
             <p className="text-muted-foreground">
               O sistema bloqueou novas vendas. Faça o <strong>fechamento</strong> para continuar.
             </p>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
           {/* Produtos & Agendamentos */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-6 min-h-0">
             {/* Products */}
             <div className="pet-card">
               <h2 className="font-semibold text-foreground mb-4">Produtos</h2>
               {isLoading ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {[1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      className="h-20 bg-muted rounded-xl animate-pulse"
-                    />
+                    <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />
                   ))}
                 </div>
               ) : products.length > 0 ? (
@@ -881,24 +896,16 @@ export default function Vendas() {
                       disabled={!canSell}
                       className="p-3 bg-muted/50 hover:bg-accent rounded-xl text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <p className="font-medium text-foreground truncate">
-                        {product.name}
-                      </p>
-                      <p className="text-primary font-semibold">
-                        R$ {product.price.toFixed(2)}
-                      </p>
+                      <p className="font-medium text-foreground truncate">{product.name}</p>
+                      <p className="text-primary font-semibold">R$ {product.price.toFixed(2)}</p>
                       {product.stock_quantity !== undefined && (
-                        <p className="text-xs text-muted-foreground">
-                          Estoque: {product.stock_quantity}
-                        </p>
+                        <p className="text-xs text-muted-foreground">Estoque: {product.stock_quantity}</p>
                       )}
                     </button>
                   ))}
                 </div>
               ) : (
-                <p className="text-muted-foreground text-center py-4">
-                  Nenhum produto cadastrado
-                </p>
+                <p className="text-muted-foreground text-center py-4">Nenhum produto cadastrado</p>
               )}
             </div>
 
@@ -949,24 +956,19 @@ export default function Vendas() {
           </div>
 
           {/* Cart */}
-          <div className="pet-card h-fit sticky top-4">
+          <div className="pet-card h-full flex flex-col min-h-0">
             <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
               <ShoppingCart size={18} />
               Carrinho ({cart.length})
             </h2>
 
-            {/* Cart Items */}
-            <div className="space-y-3 mb-4 max-h-[40vh] overflow-y-auto">
+            {/* Cart Items (única área que deve rolar no PDV) */}
+            <div ref={cartScrollRef} className="space-y-3 mb-4 flex-1 min-h-0 overflow-y-auto pr-1">
               {cart.length > 0 ? (
                 cart.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg"
-                  >
+                  <div key={item.id} className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg">
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-foreground truncate text-sm">
-                        {item.name}
-                      </p>
+                      <p className="font-medium text-foreground truncate text-sm">{item.name}</p>
                       <p className="text-sm text-muted-foreground">
                         R$ {item.price.toFixed(2)} × {item.quantity}
                       </p>
@@ -981,9 +983,7 @@ export default function Vendas() {
                       >
                         <Minus size={14} />
                       </Button>
-                      <span className="w-6 text-center font-medium">
-                        {item.quantity}
-                      </span>
+                      <span className="w-6 text-center font-medium">{item.quantity}</span>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -1088,9 +1088,7 @@ export default function Vendas() {
                 <div className="py-4 border-t border-border">
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-muted-foreground">Total:</span>
-                    <span className="text-2xl font-bold text-primary">
-                      R$ {total.toFixed(2)}
-                    </span>
+                    <span className="text-2xl font-bold text-primary">R$ {total.toFixed(2)}</span>
                   </div>
 
                   {/* Receipt Preview */}
@@ -1119,33 +1117,47 @@ export default function Vendas() {
             )}
           </div>
         </div>
+      </div>
 
-        <div className="pet-card">
-          <h2 className="font-semibold text-foreground mb-3">Atalhos do PDV</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F2</kbd>
-              <span className="text-muted-foreground">Ativar/desativar 2 formas de pagamento</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F9</kbd>
-              <span className="text-muted-foreground">Finalizar venda</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F6</kbd>
-              <span className="text-muted-foreground">Abrir/Fechar caixa</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F8</kbd>
-              <span className="text-muted-foreground">Limpar carrinho</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F7</kbd>
-              <span className="text-muted-foreground">Reimpressão de vendas (Relatórios)</span>
+      {/* Atalhos fixos no rodapé (não entram na rolagem) */}
+      <div className="fixed left-0 right-0 bottom-20 md:bottom-4 z-40 pointer-events-none">
+        <div className="mx-auto max-w-7xl px-4 md:px-6">
+          <div className="pet-card pointer-events-auto">
+            <h2 className="font-semibold text-foreground mb-3">Atalhos do PDV</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+              <div className="flex items-center gap-2">
+                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F2</kbd>
+                <span className="text-muted-foreground">Ativar/desativar 2 formas de pagamento</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F9</kbd>
+                <span className="text-muted-foreground">Finalizar venda</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F6</kbd>
+                <span className="text-muted-foreground">Abrir/Fechar caixa</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F8</kbd>
+                <span className="text-muted-foreground">Limpar carrinho</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">F7</kbd>
+                <span className="text-muted-foreground">Reimpressão de vendas (Relatórios)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">+</kbd>
+                <span className="text-muted-foreground">Rolar carrinho para baixo</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <kbd className="px-2 py-1 rounded border border-border bg-muted font-mono text-xs">-</kbd>
+                <span className="text-muted-foreground">Rolar carrinho para cima</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
 
       {/* Abrir caixa */}
       <Dialog open={openCashDialog} onOpenChange={setOpenCashDialog}>
