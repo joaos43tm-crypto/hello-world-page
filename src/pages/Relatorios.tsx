@@ -4,6 +4,7 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   BarChart3,
@@ -29,7 +30,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { generateCashClosingPdf } from "@/lib/pdv/cashClosingPdf";
 import { generateSaleReceiptPdf } from "@/lib/pdv/saleReceiptPdf";
 import { openAndPrintPdfBytes } from "@/lib/pdv/printPdf";
-
+import { generateSalesPeriodReportPdf } from "@/lib/reports/salesPeriodReportPdf";
+import { generateCashPeriodReportPdf } from "@/lib/reports/cashPeriodReportPdf";
 function todayISO() {
   return new Date().toISOString().split("T")[0];
 }
@@ -62,13 +64,17 @@ export default function Relatorios() {
   const [salesEnd, setSalesEnd] = useState(todayISO());
   const [salesList, setSalesList] = useState<Sale[]>([]);
   const [isSalesLoading, setIsSalesLoading] = useState(false);
+  const [salesReportMode, setSalesReportMode] = useState<"simples" | "detalhado">(
+    "detalhado"
+  );
+  const [isPrintingSalesReport, setIsPrintingSalesReport] = useState(false);
 
   // Caixa (histórico)
   const [cashStart, setCashStart] = useState(todayISO());
   const [cashEnd, setCashEnd] = useState(todayISO());
   const [cashSessions, setCashSessions] = useState<CashRegisterSession[]>([]);
   const [isCashLoading, setIsCashLoading] = useState(false);
-
+  const [isPrintingCashReport, setIsPrintingCashReport] = useState(false);
   const monthName = useMemo(() => {
     const today = new Date();
     return today.toLocaleDateString("pt-BR", { month: "long" });
@@ -226,6 +232,151 @@ export default function Relatorios() {
     } catch (e) {
       console.error(e);
       toast({ title: "Erro ao imprimir fechamento", variant: "destructive" });
+    }
+  };
+
+  const printSalesReport = async () => {
+    if (salesList.length === 0 || isSalesLoading || isPrintingSalesReport) return;
+
+    setIsPrintingSalesReport(true);
+    try {
+      let salesToPrint: Sale[] = salesList;
+
+      if (salesReportMode === "detalhado") {
+        const fullSales = await Promise.all(salesList.map((s) => salesApi.getById(s.id)));
+        salesToPrint = fullSales.filter(Boolean) as Sale[];
+      }
+
+      const reportSales = salesToPrint
+        .filter((s) => !!s.created_at)
+        .map((s) => ({
+          id: s.id,
+          createdAt: s.created_at!,
+          customerName: s.tutor?.name ?? null,
+          paymentMethod: s.payment_method ?? null,
+          totalAmount: Number(s.total_amount ?? 0),
+          items:
+            salesReportMode === "detalhado"
+              ? (s.items ?? []).map((i: any) => ({
+                  name: i.product?.name || i.service?.name || "Item",
+                  quantity: Number(i.quantity ?? 0),
+                  unitPrice: Number(i.unit_price ?? 0),
+                  subtotal: Number(i.subtotal ?? 0),
+                }))
+              : undefined,
+        }));
+
+      const pdfBytes = await generateSalesPeriodReportPdf({
+        storeName,
+        period: { start: salesStart, end: salesEnd },
+        mode: salesReportMode,
+        sales: reportSales,
+      });
+
+      await openAndPrintPdfBytes(pdfBytes);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Erro ao imprimir relatório de vendas", variant: "destructive" });
+    } finally {
+      setIsPrintingSalesReport(false);
+    }
+  };
+
+  const printCashReport = async () => {
+    if (cashSessions.length === 0 || isCashLoading || isPrintingCashReport) return;
+
+    setIsPrintingCashReport(true);
+    try {
+      const closedSessions = cashSessions.filter((s) => !!s.closed_at);
+      const summaries = await Promise.all(
+        closedSessions.map(async (s) => ({
+          session: s,
+          summary: await cashRegisterApi.getSessionSummary(s.id),
+        }))
+      );
+
+      const sessionsForPdf = cashSessions.map((s) => {
+        if (!s.closed_at) {
+          return {
+            id: s.id,
+            openedAt: s.opened_at,
+            closedAt: null,
+            openingBalance: Number(s.opening_balance ?? 0),
+            closingBalance: null,
+            notes: null,
+            totals: undefined,
+          };
+        }
+
+        const match = summaries.find((x) => x.session.id === s.id);
+        const summary = match?.summary;
+
+        const expectedCash =
+          Number(s.opening_balance ?? 0) +
+          Number(summary?.salesTotal ?? 0) +
+          Number(summary?.suprimentoTotal ?? 0) -
+          Number(summary?.sangriaTotal ?? 0);
+
+        const closingBalance = Number(s.closing_balance ?? 0);
+
+        return {
+          id: s.id,
+          openedAt: s.opened_at,
+          closedAt: s.closed_at,
+          openingBalance: Number(s.opening_balance ?? 0),
+          closingBalance,
+          notes: s.closing_notes ?? null,
+          totals: {
+            salesTotal: Number(summary?.salesTotal ?? 0),
+            salesCount: Number(summary?.salesCount ?? 0),
+            sangriaTotal: Number(summary?.sangriaTotal ?? 0),
+            suprimentoTotal: Number(summary?.suprimentoTotal ?? 0),
+            expectedCash,
+            difference: closingBalance - expectedCash,
+          },
+        };
+      });
+
+      const totals = sessionsForPdf
+        .filter((s) => !!s.closedAt && !!s.totals)
+        .reduce(
+          (acc, s) => {
+            const t = s.totals!;
+            acc.salesTotal += t.salesTotal;
+            acc.salesCount += t.salesCount;
+            acc.sangriaTotal += t.sangriaTotal;
+            acc.suprimentoTotal += t.suprimentoTotal;
+            acc.openingBalanceTotal += s.openingBalance;
+            acc.closingBalanceTotal += Number(s.closingBalance ?? 0);
+            acc.expectedCashTotal += t.expectedCash;
+            acc.differenceTotal += t.difference;
+            return acc;
+          },
+          {
+            salesTotal: 0,
+            salesCount: 0,
+            sangriaTotal: 0,
+            suprimentoTotal: 0,
+            openingBalanceTotal: 0,
+            closingBalanceTotal: 0,
+            expectedCashTotal: 0,
+            differenceTotal: 0,
+          }
+        );
+
+      const pdfBytes = await generateCashPeriodReportPdf({
+        storeName,
+        period: { start: cashStart, end: cashEnd },
+        sessions: sessionsForPdf,
+        totals,
+      });
+
+      await openAndPrintPdfBytes(pdfBytes);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Erro ao imprimir relatório de caixa", variant: "destructive" });
+    } finally {
+      setIsPrintingCashReport(false);
     }
   };
 
@@ -420,6 +571,34 @@ export default function Relatorios() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                <div className="md:col-span-2 space-y-2">
+                  <Label>Tipo de relatório</Label>
+                  <RadioGroup
+                    value={salesReportMode}
+                    onValueChange={(v) => setSalesReportMode(v as any)}
+                    className="flex flex-col sm:flex-row gap-3"
+                  >
+                    <Label className="flex items-center gap-2 cursor-pointer">
+                      <RadioGroupItem value="simples" />
+                      Relatório simples
+                    </Label>
+                    <Label className="flex items-center gap-2 cursor-pointer">
+                      <RadioGroupItem value="detalhado" />
+                      Relatório detalhado
+                    </Label>
+                  </RadioGroup>
+                </div>
+
+                <Button
+                  className="w-full gap-2"
+                  onClick={printSalesReport}
+                  disabled={salesList.length === 0 || isSalesLoading || isPrintingSalesReport}
+                >
+                  <ReceiptText className="w-4 h-4" />
+                  {isPrintingSalesReport ? "Gerando..." : "Imprimir relatório"}
+                </Button>
+              </div>
               <div className="space-y-3">
                 {salesList.length === 0 ? (
                   <p className="text-muted-foreground text-center py-8">Nenhuma venda no período</p>
@@ -484,6 +663,17 @@ export default function Relatorios() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2" />
+                <Button
+                  className="w-full gap-2"
+                  onClick={printCashReport}
+                  disabled={cashSessions.length === 0 || isCashLoading || isPrintingCashReport}
+                >
+                  <ReceiptText className="w-4 h-4" />
+                  {isPrintingCashReport ? "Gerando..." : "Imprimir relatório"}
+                </Button>
+              </div>
               <div className="space-y-3">
                 {cashSessions.length === 0 ? (
                   <p className="text-muted-foreground text-center py-8">Nenhuma sessão no período</p>
