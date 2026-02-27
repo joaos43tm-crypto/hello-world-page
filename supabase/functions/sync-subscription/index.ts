@@ -104,11 +104,71 @@ serve(async (req) => {
       });
     }
 
-    const planKey = String((sub.metadata as any)?.plan_key ?? "").trim() || null;
+    // Retrieve completo para garantir current_period_end e price expandido
+    const fullSub = await stripe.subscriptions.retrieve(sub.id, { expand: ["items.data.price"] });
 
-    const periodEndSeconds = Number((sub as any)?.current_period_end);
-    if (!Number.isFinite(periodEndSeconds) || periodEndSeconds <= 0) {
-      logStep("Invalid current_period_end", { subId: sub.id, current_period_end: (sub as any)?.current_period_end });
+    // --- Plano atual ---
+    const metaPlanKey = String((fullSub.metadata as any)?.plan_key ?? "").trim() || null;
+
+    const item0 = fullSub.items?.data?.[0];
+    const priceId = String((item0 as any)?.price?.id ?? (item0 as any)?.plan?.id ?? "").trim() || null;
+
+    const priceMensal = String(Deno.env.get("STRIPE_PRICE_ID_MENSAL") ?? "").trim();
+    const priceSemestral = String(Deno.env.get("STRIPE_PRICE_ID_SEMESTRAL") ?? "").trim();
+    const priceAnual = String(Deno.env.get("STRIPE_PRICE_ID_ANUAL") ?? "").trim();
+
+    let planKey: string | null = metaPlanKey;
+    if (!planKey && priceId) {
+      if (priceMensal && priceId === priceMensal) planKey = "mensal";
+      else if (priceSemestral && priceId === priceSemestral) planKey = "semestral";
+      else if (priceAnual && priceId === priceAnual) planKey = "anual";
+    }
+
+    if (!planKey) {
+      logStep("Plan key not resolved", { subId: fullSub.id, metaPlanKey, priceId });
+    }
+
+    // --- Validade ---
+    // current_period_end pode vir no topo OU no item. Vamos usar fallback.
+    const topPeriodEndSeconds = Number((fullSub as any)?.current_period_end);
+    const itemPeriodEndSeconds = Number((item0 as any)?.current_period_end);
+
+    let periodEndSeconds: number | null = null;
+    let periodEndSource: "top" | "item" | "invoice" | "missing" = "missing";
+
+    if (Number.isFinite(topPeriodEndSeconds) && topPeriodEndSeconds > 0) {
+      periodEndSeconds = topPeriodEndSeconds;
+      periodEndSource = "top";
+    } else if (Number.isFinite(itemPeriodEndSeconds) && itemPeriodEndSeconds > 0) {
+      periodEndSeconds = itemPeriodEndSeconds;
+      periodEndSource = "item";
+    }
+
+    if (!periodEndSeconds) {
+      // fallback final: pegar a invoice mais recente vinculada à assinatura e usar period_end
+      try {
+        const invoices = await stripe.invoices.list({ subscription: fullSub.id, limit: 5 });
+        const withPeriodEnd = invoices.data
+          .filter((inv) => typeof inv.period_end === "number" && inv.period_end > 0)
+          .sort((a, b) => (b.created ?? 0) - (a.created ?? 0));
+
+        const inv0 = withPeriodEnd[0];
+        if (inv0?.period_end) {
+          periodEndSeconds = inv0.period_end;
+          periodEndSource = "invoice";
+        }
+      } catch (e) {
+        logStep("Invoice fallback failed", { err: String(e), subId: fullSub.id });
+      }
+    }
+
+    if (!periodEndSeconds) {
+      logStep("Invalid current_period_end", {
+        subId: fullSub.id,
+        top: (fullSub as any)?.current_period_end,
+        item: (item0 as any)?.current_period_end,
+        source: periodEndSource,
+      });
       return new Response(JSON.stringify({ ok: true, synced: false, reason: "missing_current_period_end" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -117,7 +177,7 @@ serve(async (req) => {
 
     const validUntilDate = new Date(periodEndSeconds * 1000);
     if (Number.isNaN(validUntilDate.getTime())) {
-      logStep("Invalid validUntilDate", { subId: sub.id, periodEndSeconds });
+      logStep("Invalid validUntilDate", { subId: fullSub.id, periodEndSeconds, source: periodEndSource });
       return new Response(JSON.stringify({ ok: true, synced: false, reason: "invalid_valid_until" }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -126,6 +186,18 @@ serve(async (req) => {
 
     const validUntilIso = validUntilDate.toISOString();
     const status = computeStatus(validUntilIso);
+
+    logStep("Resolved subscription snapshot", {
+      customerId: customer.id,
+      subId: fullSub.id,
+      stripeStatus: fullSub.status,
+      priceId,
+      planKey,
+      periodEndSeconds,
+      periodEndSource,
+      validUntilIso,
+      status,
+    });
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseService, { auth: { persistSession: false } });
 
@@ -158,50 +230,66 @@ serve(async (req) => {
 
     if (upsertError) throw new Error(`company_subscriptions upsert failed: ${upsertError.message}`);
 
-    // Tenta registrar o último invoice pago (idempotente por stripe_invoice_id)
-    let invoice: Stripe.Invoice | null = null;
-    const latestInvoiceId = typeof sub.latest_invoice === "string" ? sub.latest_invoice : sub.latest_invoice?.id;
-    if (latestInvoiceId) {
-      try {
-        invoice = await stripe.invoices.retrieve(latestInvoiceId);
-      } catch (e) {
-        logStep("Failed to retrieve latest invoice", { err: String(e), latestInvoiceId });
-      }
-    }
+    // Sincroniza últimos pagamentos de forma confiável (idempotente por stripe_invoice_id)
+    try {
+      const invoicesRes = await stripe.invoices.list({ subscription: fullSub.id, limit: 5 });
+      const paidInvoices = invoicesRes.data
+        .filter((inv) => inv.status === "paid" || Boolean(inv.status_transitions?.paid_at))
+        .sort((a, b) => (b.created ?? 0) - (a.created ?? 0));
 
-    if (invoice?.id) {
-      const { data: existingPayment, error: existingPaymentErr } = await supabaseAdmin
-        .from("subscription_payments")
-        .select("id")
-        .eq("cnpj", cnpj)
-        .eq("stripe_invoice_id", invoice.id)
-        .limit(1);
+      const invoiceIds = paidInvoices.map((inv) => inv.id).filter(Boolean);
+      if (invoiceIds.length > 0) {
+        const { data: existingRows, error: existingErr } = await supabaseAdmin
+          .from("subscription_payments")
+          .select("stripe_invoice_id")
+          .eq("cnpj", cnpj)
+          .in("stripe_invoice_id", invoiceIds);
 
-      if (existingPaymentErr) throw new Error(`subscription_payments lookup failed: ${existingPaymentErr.message}`);
+        if (existingErr) throw new Error(`subscription_payments lookup failed: ${existingErr.message}`);
 
-      if (!existingPayment || existingPayment.length === 0) {
-        let paidAt = new Date().toISOString();
-        const paidAtSeconds = invoice.status_transitions?.paid_at;
-        if (paidAtSeconds) {
-          const d = new Date(paidAtSeconds * 1000);
-          if (!Number.isNaN(d.getTime())) paidAt = d.toISOString();
+        const existingSet = new Set((existingRows ?? []).map((r) => r.stripe_invoice_id).filter(Boolean));
+
+        for (const inv of paidInvoices) {
+          if (!inv?.id) continue;
+          if (existingSet.has(inv.id)) continue;
+
+          let paidAt = new Date().toISOString();
+          const paidAtSeconds = inv.status_transitions?.paid_at;
+          if (paidAtSeconds) {
+            const d = new Date(paidAtSeconds * 1000);
+            if (!Number.isNaN(d.getTime())) paidAt = d.toISOString();
+          }
+
+          const insertPayload = {
+            cnpj,
+            stripe_customer_id: customer.id,
+            stripe_subscription_id: fullSub.id,
+            stripe_invoice_id: inv.id,
+            stripe_payment_intent_id:
+              typeof inv.payment_intent === "string" ? inv.payment_intent : inv.payment_intent?.id ?? null,
+            amount: inv.amount_paid ? Number(inv.amount_paid) / 100 : null,
+            currency: inv.currency ?? null,
+            paid_at: paidAt,
+            plan_key: planKey,
+            period_start: inv.period_start ? new Date(inv.period_start * 1000).toISOString() : null,
+            period_end: inv.period_end ? new Date(inv.period_end * 1000).toISOString() : null,
+          };
+
+          logStep("Inserting subscription_payment", {
+            cnpj,
+            stripe_invoice_id: inv.id,
+            amount: insertPayload.amount,
+            currency: insertPayload.currency,
+            paid_at: insertPayload.paid_at,
+          });
+
+          const { error: insErr } = await supabaseAdmin.from("subscription_payments").insert(insertPayload);
+          if (insErr) throw new Error(`subscription_payments insert failed: ${insErr.message}`);
         }
-
-        await supabaseAdmin.from("subscription_payments").insert({
-          cnpj,
-          stripe_customer_id: customer.id,
-          stripe_subscription_id: sub.id,
-          stripe_invoice_id: invoice.id,
-          stripe_payment_intent_id:
-            typeof invoice.payment_intent === "string" ? invoice.payment_intent : invoice.payment_intent?.id ?? null,
-          amount: invoice.amount_paid ? Number(invoice.amount_paid) / 100 : null,
-          currency: invoice.currency ?? null,
-          paid_at: paidAt,
-          plan_key: planKey,
-          period_start: invoice.period_start ? new Date(invoice.period_start * 1000).toISOString() : null,
-          period_end: invoice.period_end ? new Date(invoice.period_end * 1000).toISOString() : null,
-        });
       }
+    } catch (e) {
+      // Não falha a sincronização do plano por causa do histórico; mas loga para suporte.
+      logStep("Failed syncing invoices", { err: String(e), cnpj, subId: fullSub.id });
     }
 
     return new Response(
