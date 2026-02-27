@@ -33,7 +33,7 @@ const plans: Plan[] = [
   {
     key: "semestral",
     label: "Semestral",
-    period: "186 dias",
+    period: "6 meses",
     originalPriceLabel: "R$ 359,90",
     priceLabel: "R$ 299,90",
     highlight: "economize R$ 60,00",
