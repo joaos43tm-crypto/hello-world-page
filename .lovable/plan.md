@@ -1,117 +1,136 @@
 
 ## Objetivo
-Em **Relatórios (/relatorios)**:
-1) Em **Vendas**: adicionar opção **Relatório Simples x Detalhado** + botão **Imprimir** para gerar PDF A4 do período (simples = lista; detalhado = lista + itens de cada venda).
-2) Em **Caixa**: após pesquisar o período, adicionar botão **Imprimir** para gerar PDF A4 com **lista de sessões + totais do período + observações**.
+Adicionar em **Relatórios (/relatorios)** uma nova seção/aba **Produtos** para:
+- Ver **produtos mais vendidos** (ordenação por **quantidade**) no período
+- Ver **margem de lucro** por produto (usando **custo atual do produto**)
+- **Imprimir** um **PDF A4 paisagem** com **Resumo do período + Tabela** (no mesmo padrão de Vendas/Caixa)
 
 ---
 
-## Explorar/entender estado atual (sem mudanças)
-- Confirmado: `Relatorios.tsx` já tem:
-  - Filtro de período para Vendas (`salesStart/salesEnd`) + lista `salesList`
-  - Filtro de período para Caixa (`cashStart/cashEnd`) + lista `cashSessions`
-  - Impressão atual por item:
-    - Vendas: reimprime **recibo 80mm** via `generateSaleReceiptPdf(saleId)`
-    - Caixa: reimprime **fechamento A4 por sessão** via `generateCashClosingPdf(sessionId)`
-- Confirmado: `salesApi.getById()` já traz `items:sale_items(*, product, service)` (bom para detalhamento).
-- Confirmado: `cashRegisterApi.getSessionSummary(sessionId)` fornece totais necessários (vendas/sangria/suprimento).
+## 1) Banco de dados (necessário para margem de lucro)
+### 1.1 Migration: adicionar custo ao cadastro de produtos
+Criar migration em `supabase/migrations/XXXXXXXX_add_product_cost_price.sql`:
+- `ALTER TABLE public.products ADD COLUMN cost_price numeric NOT NULL DEFAULT 0;`
+- (Opcional, mas recomendado) regra para evitar custo negativo:
+  - manter simples no app (validação no front) e/ou adicionar trigger de validação (evitar CHECK com now(), mas aqui seria só `>= 0`, então CHECK seria ok; ainda assim podemos validar no app para reduzir risco).
+
+### 1.2 RLS
+- Não precisa mudar RLS: a tabela `products` já é visível para admin/atendente; admin gerencia.
 
 ---
 
-## Design da solução
-### A) PDF novo: Relatório de Vendas (período) – A4
-**Novo arquivo:** `src/lib/reports/salesPeriodReportPdf.ts`
-- Exportar `generateSalesPeriodReportPdf(input)`
-- Conteúdo do PDF:
-  - Cabeçalho: Nome da loja + “Relatório de Vendas” + Período (De/Até) + “Gerado em…”
-  - **Resumo do período**:
-    - qtd vendas, total faturado, ticket médio
-  - **Detalhado por venda (se modo detalhado)**:
-    - Para cada venda: data/hora, id curto, cliente, forma pagamento, total
-    - Itens: (nome, qtd, unit, subtotal) com quebra de página quando necessário
-  - Rodapé: “Gerado pelo PetControl”
-- Implementar paginação (A4):
-  - Utilitário interno `ensureSpace(minHeight)`:
-    - se `y < minY + minHeight` → `addPage()` e reseta `y`
-  - Tabela simples com colunas alinhadas (sem depender de libs externas)
+## 2) Ajustes no Cadastro de Produtos (para preencher o custo)
+### 2.1 Atualizar types e API
+Editar `src/lib/petcontrol.api.ts`:
+- `export interface Product` → adicionar `cost_price?: number | null` (ou `cost_price: number` se você preferir sempre presente).
+- `productsApi.create(...)` e `productsApi.update(...)` devem aceitar/gravar `cost_price`.
 
-### B) PDF novo: Relatório de Caixa (período) – A4
-**Novo arquivo:** `src/lib/reports/cashPeriodReportPdf.ts`
-- Exportar `generateCashPeriodReportPdf(input)`
-- Conteúdo do PDF:
-  - Cabeçalho: Nome da loja + “Relatório de Caixa” + Período + “Gerado em…”
-  - **Totais do período** (somatório das sessões fechadas do período):
-    - total vendas, total suprimentos, total sangrias
-    - saldo abertura total (soma), saldo fechamento total (soma)
-    - caixa esperado total (soma) e diferença total
-  - **Lista de sessões**:
-    - Para cada sessão: abertura/fechamento, saldo abertura, saldo fechamento
-    - Totais da sessão: vendasCount/vendasTotal, sangria, suprimento, esperado, diferença
-    - Observações (closing_notes) com wrap/limite de linhas e paginação
+### 2.2 UI de Produtos
+Editar `src/pages/Produtos.tsx`:
+- Adicionar campo no formulário: **Custo (R$)** (input number)
+- Em edição: preencher `setCost(product.cost_price?.toString() ?? "0")`
+- No submit: enviar `cost_price: parseFloat(cost || "0")`
+- (Opcional) exibir no card/linha: “Custo: R$ …” e/ou “Margem (cadastro): …%” (apenas informativo)
+
+Validações mínimas:
+- custo >= 0
+- preço >= 0
+- se quiser: avisar quando custo > preço (margem negativa)
 
 ---
 
-## Alterações de UI/fluxo em /relatorios
-### 1) Aba “Vendas”
-**Arquivo:** `src/pages/Relatorios.tsx`
-- Adicionar estado:
-  - `reportMode: "simples" | "detalhado"` (default: `"detalhado"`)
-  - `isPrintingSalesReport: boolean`
-- Inserir UI próxima ao botão “Buscar” ou logo abaixo:
-  - `RadioGroup` com:
-    - “Relatório simples”
-    - “Relatório detalhado”
-  - Botão **Imprimir relatório**:
-    - `disabled` se `salesList.length === 0` ou `isSalesLoading` ou `isPrintingSalesReport`
-- Implementar handler `printSalesReport()`:
-  - Validar período e existência de dados
-  - Montar dataset:
-    - Se **simples**: pode usar o `salesList` já carregado
-    - Se **detalhado**: buscar detalhes (com itens) via `Promise.all(salesList.map(s => salesApi.getById(s.id)))`
-      - Filtrar `null`
-      - (Opcional) proteger com um “limite” por segurança (ex.: avisar se >200 vendas no período)
-  - Gerar PDF via `generateSalesPeriodReportPdf({ store, period, mode, sales })`
-  - `openAndPrintPdfBytes(pdfBytes)`
-  - Tratar erros com toast
+## 3) Dados/Agregação do Relatório de Produtos (período)
+### 3.1 Estratégia de busca (seguindo padrão existente do projeto)
+Para evitar joins complexos no PostgREST:
+1) Em `/relatorios` (aba Produtos), após “Buscar”:
+   - `salesApi.getByDateRange(start, end)` para obter as vendas do período
+2) Para obter itens:
+   - `Promise.all(salesList.map(s => salesApi.getById(s.id)))`
+3) Agregar somente itens com `product_id`:
+   - chave: `product.id`
+   - somar:
+     - `qty = Σ item.quantity`
+     - `revenue = Σ item.subtotal`
+     - `avgUnit = revenue / qty`
+     - `costUnit = product.cost_price (atual)`
+     - `costTotal = qty * costUnit`
+     - `profit = revenue - costTotal`
+     - `marginPct = revenue > 0 ? profit / revenue : 0`
 
-### 2) Aba “Caixa”
-**Arquivo:** `src/pages/Relatorios.tsx`
-- Adicionar estado:
-  - `isPrintingCashReport: boolean`
-- Após a linha de filtros (onde fica o botão “Buscar”), adicionar botão **Imprimir relatório**:
-  - `disabled` se `cashSessions.length === 0` ou `isCashLoading` ou `isPrintingCashReport`
-- Implementar handler `printCashReport()`:
-  - Para cada sessão **fechada** no `cashSessions`:
-    - Buscar resumo via `cashRegisterApi.getSessionSummary(session.id)` (usar `Promise.all`)
-    - Calcular `expectedCash` e `difference` usando a mesma regra já existente
-  - Agregar totais do período (somatórios)
-  - Gerar PDF via `generateCashPeriodReportPdf({ store, period, sessions: enriched, totals })`
-  - `openAndPrintPdfBytes(pdfBytes)`
-  - Tratar erros com toast
-  - Se houver sessões abertas no período, listar no PDF como “ABERTO” sem totais (ou simplesmente pular e indicar “Sessões abertas não entram no somatório”)
+Regras/observações:
+- Se `product.cost_price` vier null/undefined, tratar como 0.
+- Ordenação (pedido): **por quantidade desc**.
+- (Opcional) limitar volume por segurança (ex.: se período tiver > 300 vendas, avisar que pode demorar).
 
 ---
 
-## Reuso dos dados da loja
-- Reutilizar os estados já existentes em `Relatorios.tsx`:
-  - `storeName`, `storeAddress`, `storeWhatsapp`, `storeLogoUrl`
-- Para relatórios A4, usar pelo menos `storeName` no header (endereço/whatsapp opcionais; não essencial para relatório).
+## 4) UI em Relatórios: nova aba “Produtos”
+Editar `src/pages/Relatorios.tsx`:
+### 4.1 Tabs
+- Expandir `activeTab` para incluir `"produtos"`
+- Adicionar `TabsTrigger value="produtos"` com ícone (ex.: `Package` ou `ReceiptText`/`TrendingUp`)
+
+### 4.2 Estados e handlers
+Adicionar estados:
+- `productsStart/productsEnd` (default `todayISO()`)
+- `isProductsLoading`
+- `productsRank: Array<{ productId; name; qty; revenue; costUnit; costTotal; profit; marginPct }>`
+- `isPrintingProductsReport`
+
+Handlers:
+- `loadProductsReport()` (botão Buscar)
+- `printProductsReport()` (botão Imprimir)
+
+### 4.3 Layout (consistente com Vendas/Caixa)
+- Filtro de período (start/end) + botão **Buscar**
+- Cards de resumo do período:
+  - “Itens vendidos (qtd total)”
+  - “Faturamento produtos (R$)”
+  - “Lucro bruto estimado (R$)”
+  - “Margem média (ponderada) (%)” (profitTotal / revenueTotal)
+- Tabela (usar componentes `Table` já existentes):
+  - Produto | Qtd | Faturamento | Custo (unit) | Custo total | Lucro | Margem %
+- Botão **Imprimir relatório**:
+  - disabled se `productsRank.length === 0` ou loading/printing
+
+Obs: usar o mesmo header da loja já carregado (`storeName`, `storeAddress`, `storeWhatsapp`, `storeLogoUrl`).
 
 ---
 
-## Checklist de validação (end-to-end)
-1) Em **Relatórios → Vendas**, selecionar um período com vendas → clicar **Buscar**
-2) Alternar **Simples** e **Detalhado** → clicar **Imprimir relatório**
-3) Conferir:
-   - simples: lista de vendas + totais do período
-   - detalhado: cada venda contém itens (produtos/serviços), totais corretos e quebra de página ok
-4) Em **Relatórios → Caixa**, buscar um período com sessões → **Imprimir relatório**
-5) Conferir:
-   - lista de sessões + observações + totais do período batendo com os fechamentos
+## 5) PDF novo: Relatório de Produtos (período) – A4 Paisagem
+Criar `src/lib/reports/productsPeriodReportPdf.ts`:
+- Export: `generateProductsPeriodReportPdf(input)`
+- Página: `pageSize [841.89, 595.28]` (A4 paisagem), mesma paginação (`ensureSpace`, `addPage`) dos relatórios atuais
+- Header padronizado (mesma lógica de logo/endereço/whatsapp já usada em `salesPeriodReportPdf.ts` e `cashPeriodReportPdf.ts`)
+- Conteúdo:
+  1) “Relatório de Produtos”
+  2) Período + “Gerado em”
+  3) **Resumo do período**
+  4) **Tabela consolidada** (ranking por quantidade)
+- Rodapé “Gerado pelo PetControl”
 
 ---
 
-## Arquivos a criar/editar
-- **Criar:** `src/lib/reports/salesPeriodReportPdf.ts`
-- **Criar:** `src/lib/reports/cashPeriodReportPdf.ts`
-- **Editar:** `src/pages/Relatorios.tsx`
+## 6) Integração da impressão
+Editar `src/pages/Relatorios.tsx`:
+- Importar `generateProductsPeriodReportPdf`
+- Reutilizar `openAndPrintPdfBytes(pdfBytes)`
+- `printProductsReport()` monta:
+  - `period {start,end}`
+  - `store {address, whatsapp, logoUrl}`
+  - `summary totals`
+  - `rows` (lista consolidada)
+- Gerar e imprimir
+
+---
+
+## 7) Checklist de validação (end-to-end)
+1) Em **Produtos** (cadastro): editar um produto e definir **Custo**
+2) Em **Relatórios → Produtos**:
+   - escolher período com vendas de produtos
+   - clicar **Buscar**
+   - conferir ranking (qtd) e valores de lucro/margem
+3) Clicar **Imprimir relatório**:
+   - confirmar PDF A4 **paisagem**
+   - confirmar header com logo/endereço/whatsapp (quando configurados)
+   - confirmar totais e paginação (se muitos produtos)
