@@ -50,6 +50,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchSubscription = async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
       // Best-effort: após checkout, sincroniza do Stripe para refletir plano/validade/pagamento mesmo sem webhook.
       await supabase.functions.invoke("sync-subscription", { body: {} }).catch(() => null);
 

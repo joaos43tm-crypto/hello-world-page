@@ -66,7 +66,7 @@ serve(async (req) => {
       });
     }
 
-    const { data: userData, error: userError } = await supabaseAuthed.auth.getUser();
+    const { data: userData, error: userError } = await supabaseAuthed.auth.getUser(token);
     if (userError || !userData?.user) {
       return new Response(JSON.stringify({ error: "Não autenticado" }), {
         status: 401,
