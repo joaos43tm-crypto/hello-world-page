@@ -66,8 +66,15 @@ serve(async (req) => {
       });
     }
 
-    const { data: userData, error: userError } = await supabaseAuthed.auth.getUser();
-    if (userError || !userData?.user?.email) {
+    const { data: userData, error: userError } = await supabaseAuthed.auth.getUser(token);
+    if (userError || !userData?.user) {
+      return new Response(JSON.stringify({ error: "Não autenticado" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!userData.user.email) {
       return new Response(JSON.stringify({ error: "Usuário sem e-mail" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
