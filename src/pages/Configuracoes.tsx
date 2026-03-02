@@ -556,6 +556,11 @@ export default function Configuracoes() {
         )
       );
 
+      // Se o usuário editado é o usuário logado, atualiza o AuthContext
+      if (editingUser.user_id === profile?.user_id) {
+        await refreshUserData();
+      }
+
       toast({ title: "Usuário atualizado!" });
       setEditOpen(false);
       setEditingUser(null);
