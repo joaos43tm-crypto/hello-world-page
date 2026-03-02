@@ -1,64 +1,31 @@
 
-## Objetivo
-Preencher `cnpj` nos registros legados (cnpj `NULL`/vazio) para o CNPJ **15219072000100**, e depois endurecer o schema para evitar que isso volte a acontecer.
+## Diagnóstico (o que está acontecendo)
+- O nome exibido na **Sidebar** e no topo de **Configurações** vem de `useAuth()` (`profile?.name`).
+- Ao editar seu próprio usuário em **Configurações → Usuários**, a tela executa:
+  - `supabase.from("profiles").update({ name })...`
+  - mas **não atualiza o estado do AuthContext** (`profile`), então a UI continua mostrando o valor antigo até o contexto ser recarregado (e em alguns casos pode continuar “preso” por cache/estado do app).
 
-## 1) Diagnóstico rápido (SQL Editor)
-1. Rodar contagem de legados por tabela:
-```sql
-select 'services' as t, count(*) total, count(*) filter (where cnpj is null or cnpj='') legados from public.services
-union all select 'products', count(*), count(*) filter (where cnpj is null or cnpj='') from public.products
-union all select 'medical_offices', count(*), count(*) filter (where cnpj is null or cnpj='') from public.medical_offices
-union all select 'store_settings', count(*), count(*) filter (where cnpj is null or cnpj='') from public.store_settings;
-```
+## Ajuste proposto (comportamento esperado)
+Após salvar a edição do usuário, se o usuário editado for o **mesmo usuário logado**, vamos atualizar o AuthContext chamando `refreshUserData()`.
 
-## 2) Backfill (data fix) — atribuir legados ao CNPJ 15219072000100
-> Executar no **Supabase SQL Editor** (isso é UPDATE de dados, não migration).
+### Onde mexer
+Arquivo: `src/pages/Configuracoes.tsx`
+Função: `handleUpdateUser`
 
-```sql
-begin;
+### Lógica
+1. Depois de confirmar que o update do `profiles` e `user_roles` deu certo:
+2. Verificar se `editingUser.user_id === profile?.user_id`
+3. Se sim, chamar `await refreshUserData()` (isso atualiza `profile` e `role` no contexto).
+4. Manter o `setUsers(...)` como já está (para lista de usuários).
+5. Fechar modal normalmente.
 
-update public.services
-set cnpj = '15219072000100'
-where cnpj is null or cnpj = '';
+## Validação (como testar)
+1. Ir em **Configurações → Usuários**
+2. Editar o próprio usuário (mudar o nome) e salvar
+3. Confirmar que:
+   - O nome no topo de **Configurações** atualiza
+   - O nome na **Sidebar** atualiza
+4. (Opcional) Recarregar a página para garantir que o dado persistiu no banco e continua correto.
 
-update public.products
-set cnpj = '15219072000100'
-where cnpj is null or cnpj = '';
-
-update public.medical_offices
-set cnpj = '15219072000100'
-where cnpj is null or cnpj = '';
-
--- conforme sua escolha: mover a linha atual (única) de store_settings
-update public.store_settings
-set cnpj = '15219072000100'
-where cnpj is null or cnpj = '';
-
-commit;
-```
-
-## 3) Validação pós-backfill
-1. Conferir que “legados” viraram 0:
-```sql
-select 'services' as t, count(*) filter (where cnpj is null or cnpj='') legados from public.services
-union all select 'products', count(*) filter (where cnpj is null or cnpj='') from public.products
-union all select 'medical_offices', count(*) filter (where cnpj is null or cnpj='') from public.medical_offices
-union all select 'store_settings', count(*) filter (where cnpj is null or cnpj='') from public.store_settings;
-```
-2. Conferir que os registros agora aparecem no app (Serviços/Produtos/Configurações) logado como empresa 15219072000100.
-
-## 4) Endurecimento (schema) — impedir novos registros sem CNPJ
-> Isso é **schema change**: fazer via **migration** (Modify database).
-
-1. Garantir que não existe mais `NULL` antes de travar:
-   - repetir validação do passo 3.
-2. Migration:
-   - `ALTER TABLE ... ALTER COLUMN cnpj SET NOT NULL` nas tabelas onde fizer sentido para o app:
-     - `services`, `products`, `medical_offices`
-   - Para `store_settings`, antes do `NOT NULL`, garantir que sempre existirá exatamente 1 row por empresa (ou, no mínimo, para todas empresas ativas). Se hoje vocês têm múltiplas empresas, planejar a criação de `store_settings` padrão por CNPJ antes de tornar `NOT NULL`.
-
-## 5) Regressão / testes de isolamento (obrigatório)
-1. Testar end-to-end com 2 contas de CNPJs diferentes:
-   - Empresa A vê apenas os próprios serviços/produtos/consultórios/configs
-   - Empresa B não enxerga os dados da A
-2. Criar um novo serviço/produto e confirmar que o `cnpj` é preenchido automaticamente (trigger) e aparece apenas na empresa correta.
+## Observação (robustez)
+Se no futuro houver outros lugares que alterem `profiles.name`, podemos padronizar: sempre que alterar dados do usuário logado, chamar `refreshUserData()` ao final do fluxo.
