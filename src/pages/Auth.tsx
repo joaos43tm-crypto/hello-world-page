@@ -378,14 +378,27 @@ export default function Auth() {
               ) : (
                 <>
                   <UserPlus size={20} />
-                  Criar Conta
-                </>
-              )}
-            </Button>
-          </form>
+                   Criar Conta
+                 </>
+               )}
+             </Button>
+           </form>
 
-        </div>
-      </div>
+           <div className="pt-4">
+             <Button
+               type="button"
+               variant="outline"
+               className="w-full h-12"
+               onClick={() => {
+                 window.location.href = "https://petcontrolapp.com.br";
+               }}
+             >
+               Página Inicial
+             </Button>
+           </div>
+
+         </div>
+       </div>
     </div>
   );
 }
