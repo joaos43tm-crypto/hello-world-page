@@ -556,8 +556,10 @@ export default function Configuracoes() {
         )
       );
 
-      // Se o usuário editado é o usuário logado, atualiza o AuthContext
+      // Se o usuário editado é o usuário logado, mantém o banco E o auth metadata em sincronia
+      // (evita o bootstrap-user sobrescrever o nome no próximo login)
       if (editingUser.user_id === profile?.user_id) {
+        await supabase.auth.updateUser({ data: { name } }).catch(() => null);
         await refreshUserData();
       }
 
