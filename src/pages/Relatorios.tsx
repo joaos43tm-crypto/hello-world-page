@@ -26,12 +26,15 @@ import {
   ReceiptText,
   Wallet,
   Package,
+  Stethoscope,
 } from "lucide-react";
 
 import {
+  appointmentsApi,
   cashRegisterApi,
   reportsApi,
   salesApi,
+  type Appointment,
   type CashRegisterSession,
   type Pet,
   type Sale,
@@ -44,6 +47,7 @@ import { openAndPrintPdfBytes } from "@/lib/pdv/printPdf";
 import { generateSalesPeriodReportPdf } from "@/lib/reports/salesPeriodReportPdf";
 import { generateCashPeriodReportPdf } from "@/lib/reports/cashPeriodReportPdf";
 import { generateProductsPeriodReportPdf } from "@/lib/reports/productsPeriodReportPdf";
+import { generateAppointmentsPeriodReportPdf } from "@/lib/reports/appointmentsPeriodReportPdf";
 
 function todayISO() {
   return new Date().toISOString().split("T")[0];
@@ -53,7 +57,7 @@ export default function Relatorios() {
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState<
-    "overview" | "vendas" | "produtos" | "caixa"
+    "overview" | "vendas" | "produtos" | "caixa" | "atendimentos"
   >("overview");
 
 
@@ -107,6 +111,13 @@ export default function Relatorios() {
   >([]);
   const [isProductsLoading, setIsProductsLoading] = useState(false);
   const [isPrintingProductsReport, setIsPrintingProductsReport] = useState(false);
+
+  // Atendimentos (relatório)
+  const [appointmentsStart, setAppointmentsStart] = useState(todayISO());
+  const [appointmentsEnd, setAppointmentsEnd] = useState(todayISO());
+  const [appointmentsList, setAppointmentsList] = useState<Appointment[]>([]);
+  const [isAppointmentsLoading, setIsAppointmentsLoading] = useState(false);
+  const [isPrintingAppointmentsReport, setIsPrintingAppointmentsReport] = useState(false);
 
   const monthName = useMemo(() => {
     const today = new Date();
@@ -256,6 +267,22 @@ export default function Relatorios() {
       toast({ title: "Erro ao carregar relatório de produtos", variant: "destructive" });
     } finally {
       setIsProductsLoading(false);
+    }
+  };
+
+  const loadAppointmentsReport = async () => {
+    setIsAppointmentsLoading(true);
+    try {
+      const appointments = await appointmentsApi.getByDateRange(appointmentsStart, appointmentsEnd);
+      const completedAppointments = appointments.filter(
+        (appointment) => appointment.status === "finalizado" || appointment.status === "pago"
+      );
+      setAppointmentsList(completedAppointments);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Erro ao carregar relatório de atendimentos", variant: "destructive" });
+    } finally {
+      setIsAppointmentsLoading(false);
     }
   };
 
@@ -507,6 +534,22 @@ export default function Relatorios() {
     return { itemsTotal, revenueTotal, costTotal, profitTotal, marginPct };
   }, [productsRank]);
 
+  const appointmentsTotals = useMemo(() => {
+    const totalAppointments = appointmentsList.length;
+    const totalRevenue = appointmentsList.reduce((sum, appointment) => {
+      return sum + Number(appointment.price ?? appointment.service?.price ?? 0);
+    }, 0);
+    const averageTicket = totalAppointments > 0 ? totalRevenue / totalAppointments : 0;
+    const whatsappSentCount = appointmentsList.filter((appointment) => appointment.whatsapp_sent).length;
+
+    return {
+      totalAppointments,
+      totalRevenue,
+      averageTicket,
+      whatsappSentCount,
+    };
+  }, [appointmentsList]);
+
   const printProductsReport = async () => {
     if (productsRank.length === 0 || isProductsLoading || isPrintingProductsReport) return;
 
@@ -533,6 +576,42 @@ export default function Relatorios() {
     }
   };
 
+  const printAppointmentsReport = async () => {
+    if (appointmentsList.length === 0 || isAppointmentsLoading || isPrintingAppointmentsReport) return;
+
+    setIsPrintingAppointmentsReport(true);
+    try {
+      const pdfBytes = await generateAppointmentsPeriodReportPdf({
+        storeName,
+        store: {
+          address: storeAddress,
+          whatsapp: storeWhatsapp,
+          logoUrl: storeLogoUrl,
+        },
+        period: { start: appointmentsStart, end: appointmentsEnd },
+        summary: appointmentsTotals,
+        appointments: appointmentsList.map((appointment) => ({
+          id: appointment.id,
+          scheduledDate: appointment.scheduled_date,
+          scheduledTime: appointment.scheduled_time,
+          status: appointment.status ?? "-",
+          price: Number(appointment.price ?? appointment.service?.price ?? 0),
+          petName: appointment.pet?.name ?? null,
+          tutorName: appointment.pet?.tutor?.name ?? null,
+          serviceName: appointment.service?.name ?? null,
+          whatsappSent: Boolean(appointment.whatsapp_sent),
+        })),
+      });
+
+      await openAndPrintPdfBytes(pdfBytes);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Erro ao imprimir relatório de atendimentos", variant: "destructive" });
+    } finally {
+      setIsPrintingAppointmentsReport(false);
+    }
+  };
+
 
   return (
     <MainLayout>
@@ -551,6 +630,7 @@ export default function Relatorios() {
               <TabsTrigger value="overview">Visão geral</TabsTrigger>
               <TabsTrigger value="vendas">Vendas</TabsTrigger>
               <TabsTrigger value="produtos">Produtos</TabsTrigger>
+              <TabsTrigger value="atendimentos">Atendimentos</TabsTrigger>
               <TabsTrigger value="caixa">Caixa</TabsTrigger>
             </TabsList>
 
@@ -893,6 +973,110 @@ export default function Relatorios() {
                 >
                   <ReceiptText className="w-4 h-4" />
                   {isPrintingProductsReport ? "Gerando..." : "Imprimir relatório"}
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ATENDIMENTOS */}
+          <TabsContent value="atendimentos">
+            <div className="pet-card space-y-4">
+              <div className="flex items-center gap-2 text-foreground font-semibold">
+                <Stethoscope className="w-5 h-5 text-primary" />
+                Atendimentos realizados
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label>De</Label>
+                  <Input type="date" value={appointmentsStart} onChange={(e) => setAppointmentsStart(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Até</Label>
+                  <Input type="date" value={appointmentsEnd} onChange={(e) => setAppointmentsEnd(e.target.value)} />
+                </div>
+                <div className="flex items-end">
+                  <Button className="w-full" onClick={loadAppointmentsReport} disabled={isAppointmentsLoading}>
+                    {isAppointmentsLoading ? "Carregando..." : "Buscar"}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <StatCard
+                  title="Atendimentos"
+                  value={appointmentsTotals.totalAppointments}
+                  icon={Calendar}
+                  variant="primary"
+                />
+                <StatCard
+                  title="Faturamento"
+                  value={`R$ ${appointmentsTotals.totalRevenue.toFixed(2)}`}
+                  icon={DollarSign}
+                  variant="success"
+                />
+                <StatCard
+                  title="Ticket médio"
+                  value={`R$ ${appointmentsTotals.averageTicket.toFixed(2)}`}
+                  icon={TrendingUp}
+                  variant="secondary"
+                />
+                <StatCard
+                  title="WhatsApp enviado"
+                  value={appointmentsTotals.whatsappSentCount}
+                  icon={Dog}
+                  variant="warning"
+                />
+              </div>
+
+              <div className="overflow-hidden rounded-xl border bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Hora</TableHead>
+                      <TableHead>Pet</TableHead>
+                      <TableHead>Tutor</TableHead>
+                      <TableHead>Serviço</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {appointmentsList.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-10">
+                          Nenhum atendimento realizado no período
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      appointmentsList.map((appointment) => (
+                        <TableRow key={appointment.id}>
+                          <TableCell>{new Date(`${appointment.scheduled_date}T00:00:00`).toLocaleDateString("pt-BR")}</TableCell>
+                          <TableCell>{appointment.scheduled_time}</TableCell>
+                          <TableCell className="font-medium">{appointment.pet?.name ?? "-"}</TableCell>
+                          <TableCell>{appointment.pet?.tutor?.name ?? "-"}</TableCell>
+                          <TableCell>{appointment.service?.name ?? "-"}</TableCell>
+                          <TableCell className="capitalize">{(appointment.status ?? "-").replace(/_/g, " ")}</TableCell>
+                          <TableCell className="text-right">
+                            R$ {Number(appointment.price ?? appointment.service?.price ?? 0).toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2" />
+                <Button
+                  className="w-full gap-2"
+                  onClick={printAppointmentsReport}
+                  disabled={appointmentsList.length === 0 || isAppointmentsLoading || isPrintingAppointmentsReport}
+                >
+                  <ReceiptText className="w-4 h-4" />
+                  {isPrintingAppointmentsReport ? "Gerando..." : "Imprimir relatório"}
                 </Button>
               </div>
             </div>
