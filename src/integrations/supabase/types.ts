@@ -933,6 +933,21 @@ export type Database = {
         }
         Relationships: []
       }
+      superuser_allowlist: {
+        Row: {
+          created_at: string
+          email: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+        }
+        Relationships: []
+      }
       tutors: {
         Row: {
           address: string | null
@@ -1089,6 +1104,7 @@ export type Database = {
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_master_email_allowed: { Args: { _email: string }; Returns: boolean }
+      is_superuser: { Args: { _user_id: string }; Returns: boolean }
       list_companies_master: {
         Args: never
         Returns: {
@@ -1098,6 +1114,30 @@ export type Database = {
           id: string
           user_count: number
         }[]
+      }
+      superuser_list_users: {
+        Args: never
+        Returns: {
+          activity_reference_at: string
+          activity_reference_source: string
+          company_cnpj: string
+          company_created_at: string
+          company_plan: string
+          company_subscription_status: Database["public"]["Enums"]["subscription_status"]
+          company_valid_until: string
+          email: string
+          employee_count: number
+          employee_emails: string[]
+          last_plan_payment_at: string
+          last_sign_in_at: string
+          user_created_at: string
+          user_id: string
+          user_name: string
+        }[]
+      }
+      superuser_set_company_validity: {
+        Args: { _cnpj: string; _valid_until: string }
+        Returns: undefined
       }
       use_registration_code: {
         Args: { _code: string; _user_id: string }
@@ -1109,7 +1149,12 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "administrador" | "atendente" | "tosador" | "medico"
+      app_role:
+        | "administrador"
+        | "atendente"
+        | "tosador"
+        | "medico"
+        | "superuser"
       appointment_status:
         | "agendado"
         | "em_atendimento"
@@ -1247,7 +1292,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["administrador", "atendente", "tosador", "medico"],
+      app_role: [
+        "administrador",
+        "atendente",
+        "tosador",
+        "medico",
+        "superuser",
+      ],
       appointment_status: [
         "agendado",
         "em_atendimento",
